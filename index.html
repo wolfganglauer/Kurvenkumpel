@@ -39,6 +39,10 @@
   .leaflet-control-zoom a{ background:var(--panel-solid) !important; color:var(--text) !important; border-color:var(--line) !important; }
   .leaflet-popup-content-wrapper{ background:var(--panel-solid); color:var(--text); }
   .leaflet-popup-tip{ background:var(--panel-solid); }
+  /* Zoom-/Attribution-Steuerung von Leaflet liegt standardmäßig über allem (z-index 1000) und
+     überdeckte sonst Text in Status-Pille/Aktionsleiste – deshalb hier wegschieben statt überlagern. */
+  .leaflet-top{ margin-top:calc(84px + env(safe-area-inset-top)); }
+  .leaflet-bottom{ margin-bottom:calc(84px + env(safe-area-inset-bottom)); }
 
   /* ---------- Floating status pill (top) ---------- */
   #status-pill{
@@ -47,7 +51,7 @@
     padding:12px 16px; z-index:500; backdrop-filter:blur(6px);
     display:flex; align-items:center; justify-content:space-between; gap:10px;
   }
-  #status-pill .left{min-width:0;}
+  #status-pill .left{ flex:1 1 auto; min-width:0; }
   #status-pill .kind-tag{
     font-size:11px; text-transform:none; color:var(--text-dim); display:block; margin-bottom:2px;
   }
@@ -174,6 +178,12 @@
 <div class="sheet" id="sheet-route">
   <div class="sheet-handle"></div>
   <h2>Route <button id="btn-open-settings">Einstellungen</button></h2>
+  <div class="row" style="align-items:center;">
+    <button class="btn btn-ghost" id="btn-use-here" style="flex:1;">📍 Standort</button>
+    <button class="fab" id="btn-swap-dir" style="width:44px;height:44px;font-size:18px;" aria-label="Start und Ziel tauschen">⇄</button>
+    <button class="btn btn-ghost" id="btn-use-home" style="flex:1;">🏠 Zuhause</button>
+  </div>
+  <p class="note" id="start-dest-label" style="margin-top:-6px;">Start: – &middot; Ziel: –</p>
   <div class="row">
     <button class="btn btn-ghost" id="btn-gpx" style="flex:1;">GPX laden</button>
     <button class="btn btn-ghost" id="btn-gpx-export" style="flex:1;">GPX exportieren</button>
@@ -201,6 +211,8 @@
     <input type="text" id="api-key" placeholder="nur nötig, wenn diese Seite NICHT als Claude-Artefakt läuft">
   </div>
   <p class="note">Die KI-Routenplanung funktioniert ohne Key, solange diese Seite als Claude-Artefakt in einem Chat geöffnet ist. Selbst gehostet (z. B. für die Navigation unterwegs) braucht sie einen eigenen Key von console.anthropic.com – dann nicht mehr kostenfrei im Sinne von Anthropic-Nutzung, aber ohne App-Abo. Der Key bleibt nur im Arbeitsspeicher dieser Seite, wird nirgends gespeichert und bei jedem Neuladen gelöscht.</p>
+  <button class="btn btn-ghost btn-block" id="btn-clear-home">Zuhause-Position löschen</button>
+  <p class="note">Die Zuhause-Position wird ausschließlich lokal im Browser dieses Geräts gespeichert (localStorage), nirgends hochgeladen.</p>
   <button class="btn btn-ghost btn-block close-sheet">Schließen</button>
 </div>
 
@@ -267,6 +279,15 @@
   var meMarker = null;
   var recog = null;
 
+  /* Start/Ziel per aktuellem Standort bzw. gespeichertem "Zuhause" */
+  var homePos = null;                        // {lat,lon} – persistiert lokal (localStorage)
+  var currentPos = null;                     // {lat,lon} – letzte einmalige Standort-Erfassung
+  var routeMode = { startIsHome:false };      // false: Start=Standort, Ziel=Zuhause; true: getauscht
+  try{
+    var savedHome = localStorage.getItem('kurvenkumpel_home');
+    if (savedHome) homePos = JSON.parse(savedHome);
+  }catch(e){ /* z. B. in einer Sandbox ohne Speicherzugriff - "Zuhause" muss dann je Sitzung neu gesetzt werden */ }
+
   /* ---------------- Map ---------------- */
   var map = L.map('map', { zoomControl:true, attributionControl:true }).setView([47.5, 11.0], 7);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -320,6 +341,42 @@
   function isLastStop(pt){
     var stops = points.filter(function(p){ return p.kind==='stop'; });
     return stops.length && stops[stops.length-1].id === pt.id;
+  }
+
+  /* ---------------- Start/Ziel: Standort & Zuhause ---------------- */
+  function captureOnce(){
+    return new Promise(function(resolve, reject){
+      if (!('geolocation' in navigator)){ reject(new Error('Geolocation nicht unterstützt.')); return; }
+      navigator.geolocation.getCurrentPosition(
+        function(pos){ resolve({ lat:pos.coords.latitude, lon:pos.coords.longitude }); },
+        function(err){ reject(err); },
+        { enableHighAccuracy:true, timeout:15000 }
+      );
+    });
+  }
+
+  function saveHome(pos){
+    homePos = pos;
+    try{ localStorage.setItem('kurvenkumpel_home', JSON.stringify(pos)); }
+    catch(e){ /* Speicherung nicht verfügbar - "Zuhause" gilt dann nur für diese Sitzung */ }
+  }
+
+  // Ersetzt evtl. vorher gesetzte Start-/Ziel-Marker; dazwischenliegende, manuell angelegte
+  // Wegpunkte/Zwischenstopps bleiben unangetastet.
+  function refreshStartDestinationPoints(){
+    points = points.filter(function(p){ return p.id!=='auto_start' && p.id!=='auto_dest'; });
+    var startPos = routeMode.startIsHome ? homePos : currentPos;
+    var destPos  = routeMode.startIsHome ? currentPos : homePos;
+    if (startPos) points.unshift({ id:'auto_start', name: routeMode.startIsHome ? 'Zuhause' : 'Aktueller Standort', lat:startPos.lat, lon:startPos.lon, kind:'waypoint', reached:false });
+    if (destPos)  points.push({ id:'auto_dest', name: routeMode.startIsHome ? 'Aktueller Standort' : 'Zuhause', lat:destPos.lat, lon:destPos.lon, kind:'stop', reached:false });
+    updateStartDestLabel();
+    renderAll();
+  }
+
+  function updateStartDestLabel(){
+    var startName = routeMode.startIsHome ? (homePos ? 'Zuhause' : '–') : (currentPos ? 'Aktueller Standort' : '–');
+    var destName  = routeMode.startIsHome ? (currentPos ? 'Aktueller Standort' : '–') : (homePos ? 'Zuhause' : '–');
+    document.getElementById('start-dest-label').textContent = 'Start: ' + startName + ' · Ziel: ' + destName;
   }
 
   /* ---------------- Rendering ---------------- */
@@ -696,6 +753,42 @@
   document.getElementById('btn-continue-nav').onclick = function(){ closeArrival(true); };
   document.getElementById('btn-continue-only').onclick = function(){ closeArrival(false); };
 
+  document.getElementById('btn-use-here').onclick = function(){
+    var btn = this; var original = btn.textContent;
+    btn.disabled = true; btn.textContent = 'Ermittle…';
+    captureOnce().then(function(pos){
+      currentPos = pos;
+      refreshStartDestinationPoints();
+    }).catch(function(err){
+      alert('Standort konnte nicht ermittelt werden: ' + err.message);
+    }).then(function(){ btn.disabled = false; btn.textContent = original; });
+  };
+
+  document.getElementById('btn-use-home').onclick = function(){
+    if (homePos){ refreshStartDestinationPoints(); return; }
+    var btn = this; var original = btn.textContent;
+    btn.disabled = true; btn.textContent = 'Ermittle…';
+    captureOnce().then(function(pos){
+      saveHome(pos);
+      refreshStartDestinationPoints();
+    }).catch(function(err){
+      alert('Standort konnte nicht ermittelt werden: ' + err.message);
+    }).then(function(){ btn.disabled = false; btn.textContent = original; });
+  };
+
+  document.getElementById('btn-swap-dir').onclick = function(){
+    routeMode.startIsHome = !routeMode.startIsHome;
+    refreshStartDestinationPoints();
+  };
+
+  document.getElementById('btn-clear-home').onclick = function(){
+    homePos = null;
+    try{ localStorage.removeItem('kurvenkumpel_home'); }catch(e){}
+    updateStartDestLabel();
+    alert('Zuhause-Position gelöscht.');
+  };
+
+  updateStartDestLabel();
   renderAll();
 })();
 </script>
