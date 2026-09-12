@@ -1,0 +1,992 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0B0E13">
+<title>Kurvenkumpel</title>
+<meta name="apple-mobile-web-app-title" content="Kurvenkumpel">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+<style>
+  :root{
+    --bg:#0B0E13; --panel:rgba(20,24,31,.94); --panel-solid:#161B22; --line:#2A313C;
+    --text:#EDEFF2; --text-dim:#9AA3B2;
+    --accent:#FFB020; --accent-ink:#1A1300;
+    --ok:#38C172; --danger:#E5484D; --route:#2FB6C4;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:'Inter',system-ui,-apple-system,sans-serif;
+    overflow:hidden; position:fixed; inset:0;
+  }
+  h1,h2,.num{font-family:'Barlow Condensed',system-ui,sans-serif; font-weight:700;}
+  button{font-family:'Inter'; cursor:pointer; border:none; background:none; color:var(--text);}
+
+  /* ---------- Map fills the whole screen ---------- */
+  #map{position:absolute; inset:0; background:var(--bg);}
+  .leaflet-tile-pane{ filter:invert(1) hue-rotate(180deg) brightness(.95) contrast(.9) saturate(.7); }
+  .leaflet-overlay-pane, .leaflet-marker-pane, .leaflet-popup-pane, .leaflet-tooltip-pane{
+    filter:invert(1) hue-rotate(180deg);
+  }
+  .leaflet-control-attribution{ background:var(--panel) !important; color:var(--text-dim) !important; font-size:10px !important;}
+  .leaflet-control-attribution a{ color:var(--text-dim) !important; }
+  .leaflet-control-zoom a{ background:var(--panel-solid) !important; color:var(--text) !important; border-color:var(--line) !important; }
+  .leaflet-popup-content-wrapper{ background:var(--panel-solid); color:var(--text); }
+  .leaflet-popup-tip{ background:var(--panel-solid); }
+  /* Zoom-/Attribution-Steuerung von Leaflet liegt standardmäßig über allem (z-index 1000) und
+     überdeckte sonst Text in Status-Pille/Aktionsleiste – deshalb hier wegschieben statt überlagern. */
+  .leaflet-top{ margin-top:calc(132px + env(safe-area-inset-top)); }
+  .leaflet-bottom{ margin-bottom:calc(84px + env(safe-area-inset-bottom)); }
+
+  /* ---------- Oberer Bereich: komprimierte Routenübersicht + Status-Pille, gestapelt ---------- */
+  #top-overlay{
+    position:absolute; top:calc(14px + env(safe-area-inset-top)); left:14px; right:14px;
+    z-index:500; display:flex; flex-direction:column; gap:8px;
+  }
+  #route-overview{
+    display:none; align-items:center; gap:4px; flex-wrap:nowrap; overflow-x:auto;
+    background:var(--panel); border:1px solid var(--line); border-radius:14px;
+    padding:10px 14px; backdrop-filter:blur(6px);
+  }
+  #route-overview.show{ display:flex; }
+  .ro-dot{ width:9px; height:9px; border-radius:50%; flex:0 0 auto; background:var(--text-dim); }
+  .ro-dot.stop{ width:12px; height:12px; border:2px solid var(--text-dim); background:var(--panel-solid); }
+  .ro-dot.reached{ background:var(--ok); border-color:var(--ok); }
+  .ro-dot.current{ background:var(--accent); border-color:var(--accent); }
+  .ro-line{ flex:1 1 14px; min-width:10px; height:2px; background:var(--line); }
+  .ro-label{ font-size:11px; color:var(--text); font-weight:600; flex:0 0 auto; max-width:90px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+  /* ---------- Status-Pille ---------- */
+  #status-pill{
+    background:var(--panel); border:1px solid var(--line); border-radius:16px;
+    padding:12px 16px; backdrop-filter:blur(6px);
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+  }
+  #status-pill .left{ flex:1 1 auto; min-width:0; }
+  #status-pill .kind-tag{
+    font-size:11px; text-transform:none; color:var(--text-dim); display:block; margin-bottom:2px;
+  }
+  #status-pill .target-name{font-size:18px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  #status-pill .dist{font-family:'Barlow Condensed'; font-size:26px; font-weight:700; color:var(--accent); white-space:nowrap; flex:0 0 auto;}
+  #status-pill .dist small{font-size:12px; color:var(--text-dim); font-weight:500;}
+
+  /* ---------- Bottom floating action bar: wenige Elemente ---------- */
+  #action-bar{
+    position:absolute; left:14px; right:14px; bottom:calc(14px + env(safe-area-inset-bottom));
+    display:flex; align-items:center; justify-content:center; gap:26px; z-index:500;
+  }
+  .fab{
+    width:56px; height:56px; border-radius:50%; background:var(--panel); border:1px solid var(--line);
+    display:flex; align-items:center; justify-content:center; font-size:22px; flex:0 0 auto;
+  }
+  .fab-main{
+    width:56px; height:56px; border-radius:50%; background:var(--accent); color:var(--accent-ink);
+    font-size:24px; font-weight:600; display:flex; align-items:center; justify-content:center; flex:0 0 auto;
+  }
+  .fab-main.stop{ background:var(--danger); color:#fff; }
+
+  /* Android meldet env(safe-area-inset-bottom) für die Geräte-Navigationsleiste nicht immer so
+     zuverlässig wie iOS die Home-Indicator-Aussparung - deshalb dort etwas mehr Luft lassen. */
+  html.platform-android #action-bar{ bottom:calc(14px + env(safe-area-inset-bottom) + 10px); }
+  html.platform-android #btn-locate{ bottom:calc(14px + env(safe-area-inset-bottom) + 78px); }
+  html.platform-android .sheet{ padding-bottom:calc(18px + env(safe-area-inset-bottom) + 10px); }
+
+  /* Schwebender "Meinen Standort anzeigen"-Button, links über der Aktionsleiste (rechts liegt die
+     Leaflet-Attribution, siehe oben) */
+  #btn-locate{
+    position:absolute; left:14px; z-index:500;
+    bottom:calc(14px + env(safe-area-inset-bottom) + 68px);
+  }
+
+  /* ---------- Bottom sheet (Route/Einstellungen) ---------- */
+  .sheet-backdrop{ position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:800; display:none; }
+  .sheet-backdrop.show{ display:block; }
+  .sheet{
+    position:fixed; left:0; right:0; bottom:0; max-height:82vh; overflow-y:auto;
+    background:var(--panel-solid); border-top-left-radius:20px; border-top-right-radius:20px;
+    border-top:1px solid var(--line); z-index:801; transform:translateY(100%); transition:transform .22s ease;
+    padding:8px 18px calc(18px + env(safe-area-inset-bottom));
+  }
+  .sheet.show{ transform:translateY(0); }
+  .sheet-handle{ width:36px; height:4px; background:var(--line); border-radius:2px; margin:8px auto 14px; }
+  .sheet h2{ margin:0 0 12px; font-size:17px; font-family:'Inter'; font-weight:600; display:flex; justify-content:space-between; align-items:center;}
+  .sheet h2 button{ font-size:13px; color:var(--text-dim); font-weight:500; }
+
+  ul#pt-list{ list-style:none; margin:0 0 16px; padding:0; }
+  ul#pt-list li{ display:flex; align-items:center; gap:10px; padding:9px 4px; border-bottom:1px solid var(--line); background:var(--panel-solid); }
+  ul#pt-list li:last-child{ border-bottom:none; }
+  ul#pt-list li.dragging{ opacity:.85; border-radius:10px; box-shadow:0 4px 14px rgba(0,0,0,.4); position:relative; z-index:5; }
+  .pt-drag{ flex:0 0 auto; color:var(--text-dim); font-size:18px; padding:4px 6px; cursor:grab; touch-action:none; }
+  .pt-icon{ width:26px; height:26px; border-radius:50%; flex:0 0 auto; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; }
+  .pt-icon.waypoint{ background:var(--panel); color:var(--text-dim); width:14px; height:14px; margin:0 6px; }
+  .pt-icon.stop{ background:var(--panel); color:var(--text); border:2px solid var(--text-dim); }
+  li.reached .pt-icon.stop{ background:var(--ok); color:#06210F; border-color:var(--ok); }
+  li.next .pt-icon.stop{ background:var(--accent); color:var(--accent-ink); border-color:var(--accent); }
+  li.reached{ opacity:.55; }
+  .pt-name{ flex:1 1 auto; font-size:14px; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .pt-kind-toggle{ font-size:11px; color:var(--text-dim); border:1px solid var(--line); border-radius:8px; padding:4px 8px; flex:0 0 auto; }
+  .pt-del{ color:var(--text-dim); font-size:16px; padding:4px 6px; flex:0 0 auto; }
+
+  .row{ display:flex; gap:10px; margin-bottom:12px; }
+  .btn{ padding:12px 14px; border-radius:12px; font-size:14px; font-weight:600; }
+  .btn-primary{ background:var(--accent); color:var(--accent-ink); }
+  .btn-ghost{ background:var(--panel); border:1px solid var(--line); color:var(--text); }
+  .btn-block{ width:100%; }
+  .field{ margin-bottom:12px; }
+  .field label{ display:block; font-size:12px; color:var(--text-dim); margin-bottom:5px; }
+  .field input[type=text], .field input[type=number], .field textarea{
+    width:100%; padding:10px 12px; border-radius:10px; border:1px solid var(--line);
+    background:var(--panel); color:var(--text); font-size:14px; font-family:inherit;
+  }
+  .field textarea{ min-height:80px; resize:vertical; }
+  .row2{ display:flex; gap:10px; }
+  .row2 .field{ flex:1; }
+  .toggle-row{ display:flex; align-items:center; justify-content:space-between; padding:10px 0; border-bottom:1px solid var(--line); }
+  .toggle-row:last-of-type{ border-bottom:none; }
+  .toggle-row small{ display:block; color:var(--text-dim); font-size:11px; margin-top:2px; }
+  input[type=range]{ width:100%; accent-color:var(--accent); }
+  input[type=checkbox]{ width:22px; height:22px; accent-color:var(--accent); }
+  .note{ font-size:12px; color:var(--text-dim); line-height:1.5; margin:6px 0 14px; }
+  .badge-status{ font-size:11px; padding:3px 8px; border-radius:8px; display:inline-block; margin-bottom:8px;}
+  .badge-status.ok{ background:rgba(56,193,114,.15); color:var(--ok); }
+  .badge-status.err{ background:rgba(229,72,77,.15); color:var(--danger); }
+  .mic-row{ display:flex; align-items:center; gap:10px; margin-bottom:12px; }
+  .mic-btn{ width:48px; height:48px; border-radius:50%; background:var(--panel); border:1px solid var(--line); font-size:20px; flex:0 0 auto; }
+  .mic-btn.live{ background:var(--danger); color:#fff; }
+  #ai-result{ margin-top:4px; }
+  #ai-result .pt{ font-size:13px; padding:6px 0; border-bottom:1px solid var(--line); }
+  #ai-result .pt:last-child{ border-bottom:none; }
+  #ai-result .pt .r{ color:var(--text-dim); font-size:12px; }
+
+  /* ---------- Arrival overlay ---------- */
+  #arrival{
+    position:fixed; inset:0; background:rgba(6,9,13,.96); z-index:1000;
+    display:none; flex-direction:column; align-items:center; justify-content:center;
+    text-align:center; padding:28px; padding-top:env(safe-area-inset-top);
+  }
+  #arrival.show{ display:flex; }
+  #arrival .headline{ font-size:36px; color:var(--ok); margin:0 0 6px; }
+  #arrival .sub{ color:var(--text-dim); font-size:15px; margin-bottom:26px; }
+  #arrival .next-name{ font-size:24px; font-weight:600; margin-bottom:24px; }
+  #arrival .btn{ width:min(360px,100%); margin-bottom:10px; padding:15px; }
+</style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<div id="top-overlay">
+  <div id="route-overview"></div>
+  <div id="status-pill">
+    <div class="left">
+      <span class="kind-tag" id="pill-kind">Kein Ziel</span>
+      <div class="target-name" id="pill-name">–</div>
+    </div>
+    <div class="dist" id="pill-dist">– <small>m</small></div>
+  </div>
+</div>
+
+<div id="action-bar">
+  <button class="fab" id="btn-mic-open" aria-label="Route per Sprache planen">🎙</button>
+  <button class="fab-main" id="btn-track" aria-label="Tracking starten">▶</button>
+  <button class="fab" id="btn-list-open" aria-label="Route &amp; Einstellungen">☰</button>
+</div>
+<button class="fab" id="btn-locate" aria-label="Meinen Standort anzeigen">🔵</button>
+
+<!-- Arrival overlay -->
+<div id="arrival">
+  <div class="headline">Zwischenstopp erreicht</div>
+  <div class="sub" id="arrival-reached-name"></div>
+  <div class="next-name" id="arrival-next-name"></div>
+  <button class="btn btn-primary" id="btn-continue-nav">Nächste Etappe starten &amp; navigieren</button>
+  <button class="btn btn-ghost" id="btn-continue-only">Nur weiter (ohne Navigations-App)</button>
+</div>
+
+<div class="sheet-backdrop" id="backdrop"></div>
+
+<!-- Sheet: Route -->
+<div class="sheet" id="sheet-route">
+  <div class="sheet-handle"></div>
+  <h2>Route <span style="display:flex; gap:8px;"><button id="btn-file-menu" aria-label="Dateimenü">⋯</button><button id="btn-open-settings">Einstellungen</button></span></h2>
+  <div class="row" style="align-items:center;">
+    <button class="btn btn-ghost" id="btn-use-here" style="flex:1;">📍 Standort</button>
+    <button class="fab" id="btn-swap-dir" style="width:44px;height:44px;font-size:18px;" aria-label="Start und Ziel tauschen">⇄</button>
+    <button class="btn btn-ghost" id="btn-use-home" style="flex:1;">🏠 Endziel</button>
+  </div>
+  <p class="note" id="start-dest-label" style="margin-top:-6px;">Start: – &middot; Ziel: –</p>
+  <div class="row">
+    <input type="text" id="dest-search" placeholder="Ziel eingeben (Ort/Adresse)" style="flex:1;">
+    <button class="btn btn-ghost" id="btn-dest-search" style="flex:0 0 auto;">Suchen</button>
+  </div>
+  <div id="dest-search-results" style="margin-bottom:8px;"></div>
+  <div id="file-menu" class="row" style="display:none;">
+    <button class="btn btn-ghost" id="btn-gpx" style="flex:1;">GPX laden</button>
+    <button class="btn btn-ghost" id="btn-gpx-export" style="flex:1;">GPX exportieren</button>
+  </div>
+  <div class="row">
+    <button class="btn btn-primary" id="btn-add-open" style="flex:1;">+ Punkt</button>
+  </div>
+  <ul id="pt-list"></ul>
+  <p class="note">Wegpunkte (kleiner Punkt) dienen nur der Streckenführung – keine Ankunftserkennung. Zwischenstopps (Kreis) werden erkannt; der letzte Zwischenstopp ist das Endziel.</p>
+  <input type="file" id="gpx-input" accept=".gpx" style="display:none;">
+</div>
+
+<!-- Sheet: Einstellungen -->
+<div class="sheet" id="sheet-settings">
+  <div class="sheet-handle"></div>
+  <h2>Einstellungen</h2>
+  <div class="field">
+    <label for="radius">Ankunftsradius: <span id="radius-val">100</span> m</label>
+    <input type="range" id="radius" min="30" max="300" step="10" value="100">
+  </div>
+  <div class="toggle-row">
+    <div><span>Sprachansage</span><small>Meldet Ankunft und nächstes Ziel per Sprache</small></div>
+    <input type="checkbox" id="chk-voice" checked>
+  </div>
+  <div class="field" style="margin-top:14px;">
+    <label for="api-key">Eigener Anthropic API-Key (optional)</label>
+    <input type="text" id="api-key" placeholder="nur nötig, wenn diese Seite NICHT als Claude-Artefakt läuft">
+  </div>
+  <p class="note">Die KI-Routenplanung funktioniert ohne Key, solange diese Seite als Claude-Artefakt in einem Chat geöffnet ist. Selbst gehostet (z. B. für die Navigation unterwegs) braucht sie einen eigenen Key von console.anthropic.com – dann nicht mehr kostenfrei im Sinne von Anthropic-Nutzung, aber ohne App-Abo. Der Key bleibt nur im Arbeitsspeicher dieser Seite, wird nirgends gespeichert und bei jedem Neuladen gelöscht.</p>
+  <button class="btn btn-ghost btn-block" id="btn-clear-home">Zuhause-Position löschen</button>
+  <p class="note">Die Zuhause-Position wird ausschließlich lokal im Browser dieses Geräts gespeichert (localStorage), nirgends hochgeladen.</p>
+  <button class="btn btn-ghost btn-block close-sheet">Schließen</button>
+</div>
+
+<!-- Sheet: Sprach-/KI-Planung -->
+<div class="sheet" id="sheet-ai">
+  <div class="sheet-handle"></div>
+  <h2>Route per Sprache planen</h2>
+  <div class="mic-row">
+    <button class="mic-btn" id="btn-mic">🎙</button>
+    <span class="note" id="mic-hint" style="margin:0;">Antippen und Strecke beschreiben, z. B. „Kurvige Tour von Innsbruck über den Brenner zum Gardasee, eine Pause nach etwa zwei Stunden“.</span>
+  </div>
+  <div class="field">
+    <label for="ai-desc">Beschreibung (bearbeitbar)</label>
+    <textarea id="ai-desc" placeholder="Strecke beschreiben oder Mikrofon nutzen…"></textarea>
+  </div>
+  <button class="btn btn-primary btn-block" id="btn-ai-plan">Streckenvorschlag erstellen</button>
+  <div id="ai-status"></div>
+  <div id="ai-result"></div>
+  <button class="btn btn-ghost btn-block close-sheet" style="margin-top:12px;">Schließen</button>
+</div>
+
+<!-- Punkt hinzufügen -->
+<div class="sheet" id="sheet-add">
+  <div class="sheet-handle"></div>
+  <h2>Punkt hinzufügen</h2>
+  <div class="field">
+    <label for="search-addr">Ort suchen (OpenStreetMap)</label>
+    <input type="text" id="search-addr" placeholder="z. B. Stilfser Joch">
+  </div>
+  <button class="btn btn-ghost btn-block" id="btn-search">Suchen</button>
+  <div id="search-results" style="margin:10px 0;"></div>
+  <div class="field">
+    <label for="wp-name">Name</label>
+    <input type="text" id="wp-name">
+  </div>
+  <div class="row2">
+    <div class="field"><label for="wp-lat">Breitengrad</label><input type="number" id="wp-lat" step="0.000001"></div>
+    <div class="field"><label for="wp-lon">Längengrad</label><input type="number" id="wp-lon" step="0.000001"></div>
+  </div>
+  <div class="row2" style="margin-bottom:14px;">
+    <button class="btn btn-ghost" id="kind-waypoint" style="flex:1;">Wegpunkt</button>
+    <button class="btn btn-primary" id="kind-stop" style="flex:1;">Zwischenstopp</button>
+  </div>
+  <p class="note">Auf die Karte tippen setzt Breiten-/Längengrad automatisch. Aktuell gewählte Art: <b id="kind-current">Zwischenstopp</b>.</p>
+  <button class="btn btn-primary btn-block" id="btn-save-wp">Speichern</button>
+  <button class="btn btn-ghost btn-block close-sheet" style="margin-top:8px;">Abbrechen</button>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script>
+(function(){
+  "use strict";
+
+  /* =========================================================
+     State
+     kind: 'waypoint' (nur Streckenführung) | 'stop' (Pause, wird erkannt)
+     ========================================================= */
+  var points = [];        // {id,name,lat,lon,kind,reached}
+  var tracking = false;
+  var watchId = null;
+  var wakeLock = null;
+  var settings = { radius:100, voice:true };
+  var pendingKind = 'stop';
+  var meMarker = null;
+  var recog = null;
+
+  /* Start/Ziel per aktuellem Standort bzw. gespeichertem "Zuhause" */
+  var homePos = null;                        // {lat,lon} – persistiert lokal (localStorage)
+  var currentPos = null;                     // {lat,lon} – letzte einmalige Standort-Erfassung
+  var routeMode = { startIsHome:false };      // false: Start=Standort, Ziel=Zuhause; true: getauscht
+  try{
+    var savedHome = localStorage.getItem('kurvenkumpel_home');
+    if (savedHome) homePos = JSON.parse(savedHome);
+  }catch(e){ /* z. B. in einer Sandbox ohne Speicherzugriff - "Zuhause" muss dann je Sitzung neu gesetzt werden */ }
+
+  /* ---------------- Map ---------------- */
+  var map = L.map('map', { zoomControl:true, attributionControl:true }).setView([47.5, 11.0], 7);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19, attribution: '&copy; OpenStreetMap-Mitwirkende &middot; Routing: OSRM/FOSSGIS'
+  }).addTo(map);
+
+  var routeLine = L.polyline([], { color:'#2FB6C4', weight:4, opacity:.9 }).addTo(map);
+  var markers = [];
+
+  map.on('click', function(e){
+    document.getElementById('wp-lat').value = e.latlng.lat.toFixed(6);
+    document.getElementById('wp-lon').value = e.latlng.lng.toFixed(6);
+    openSheet('sheet-add');
+  });
+
+  /* ---------------- Helpers ---------------- */
+  function uid(){ return 'p_' + Math.random().toString(36).slice(2,9); }
+  function sleep(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
+
+  function distMeters(lat1, lon1, lat2, lon2){
+    var R = 6371000, toRad = function(d){ return d*Math.PI/180; };
+    var dLat = toRad(lat2-lat1), dLon = toRad(lon2-lon1);
+    var a = Math.sin(dLat/2)*Math.sin(dLat/2) + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)*Math.sin(dLon/2);
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  }
+
+  function isAndroid(){ return /Android/i.test(navigator.userAgent); }
+  function isIOS(){
+    // iPadOS meldet sich seit iOS 13 als "MacIntel" - über Touchpoints zusätzlich abgrenzen.
+    return /iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  }
+  document.documentElement.classList.add(isIOS() ? 'platform-ios' : (isAndroid() ? 'platform-android' : 'platform-other'));
+
+  function navUrl(pt){
+    if (isAndroid()) return 'geo:' + pt.lat + ',' + pt.lon + '?q=' + pt.lat + ',' + pt.lon + '(' + encodeURIComponent(pt.name) + ')';
+    return 'https://www.google.com/maps/dir/?api=1&destination=' + pt.lat + ',' + pt.lon + '&travelmode=driving';
+  }
+
+  function speak(text){
+    if (!settings.voice || !('speechSynthesis' in window)) return;
+    try{
+      var u = new SpeechSynthesisUtterance(text);
+      u.lang = 'de-DE';
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(u);
+    }catch(e){ console.warn('TTS fehlgeschlagen', e); }
+  }
+
+  function vibrate(pattern){ if ('vibrate' in navigator){ try{ navigator.vibrate(pattern); }catch(e){} } }
+
+  /* Nächster noch nicht erreichter Zwischenstopp, unabhängig von dazwischenliegenden Wegpunkten */
+  function nextStop(){
+    for (var i=0;i<points.length;i++){ if (points[i].kind==='stop' && !points[i].reached) return points[i]; }
+    return null;
+  }
+  function isLastStop(pt){
+    var stops = points.filter(function(p){ return p.kind==='stop'; });
+    return stops.length && stops[stops.length-1].id === pt.id;
+  }
+
+  /* ---------------- Start/Ziel: Standort & Zuhause ---------------- */
+  function captureOnce(){
+    return new Promise(function(resolve, reject){
+      if (!('geolocation' in navigator)){ reject(new Error('Geolocation nicht unterstützt.')); return; }
+      navigator.geolocation.getCurrentPosition(
+        function(pos){ resolve({ lat:pos.coords.latitude, lon:pos.coords.longitude }); },
+        function(err){ reject(err); },
+        { enableHighAccuracy:true, timeout:15000 }
+      );
+    });
+  }
+
+  function saveHome(pos){
+    homePos = pos;
+    try{ localStorage.setItem('kurvenkumpel_home', JSON.stringify(pos)); }
+    catch(e){ /* Speicherung nicht verfügbar - "Zuhause" gilt dann nur für diese Sitzung */ }
+  }
+
+  // Eigene, kleine Funktion statt Wiederverwendung von onPosition() weiter unten,
+  // damit die bereits getestete Tracking-Logik unangetastet bleibt.
+  function placeMeMarker(pos){
+    if (meMarker) map.removeLayer(meMarker);
+    meMarker = L.circleMarker([pos.lat, pos.lon], { radius:7, color:'#EDEFF2', fillColor:'#2FB6C4', fillOpacity:1, weight:2 }).addTo(map);
+    map.setView([pos.lat, pos.lon], Math.max(map.getZoom(), 14));
+  }
+
+  // Ersetzt evtl. vorher gesetzte Start-/Ziel-Marker; dazwischenliegende, manuell angelegte
+  // Wegpunkte/Zwischenstopps bleiben unangetastet. Benennung erfolgt nach Rolle in der Route
+  // ("Startpunkt"/"Endziel"), unabhängig davon, ob die Koordinate vom Standort oder von Zuhause stammt.
+  function refreshStartDestinationPoints(){
+    points = points.filter(function(p){ return p.id!=='auto_start' && p.id!=='auto_dest'; });
+    var startPos = routeMode.startIsHome ? homePos : currentPos;
+    var destPos  = routeMode.startIsHome ? currentPos : homePos;
+    if (startPos) points.unshift({ id:'auto_start', name:'Startpunkt', lat:startPos.lat, lon:startPos.lon, kind:'waypoint', reached:false });
+    if (destPos)  points.push({ id:'auto_dest', name:'Endziel', lat:destPos.lat, lon:destPos.lon, kind:'stop', reached:false });
+    updateStartDestLabel();
+    renderAll();
+  }
+
+  function updateStartDestLabel(){
+    var s = points.find(function(p){ return p.id==='auto_start'; });
+    var d = points.find(function(p){ return p.id==='auto_dest'; });
+    document.getElementById('start-dest-label').textContent = 'Start: ' + (s ? s.name : '–') + ' · Ziel: ' + (d ? d.name : '–');
+  }
+
+  // Frei eingegebenes Ziel: ersetzt nur den Ziel-Marker, unabhängig von Zuhause/Standort.
+  // Wird danach erneut ⇄ oder "Zuhause" benutzt, überschreibt das wiederum dieses Ziel -
+  // es gewinnt jeweils die zuletzt benutzte Methode.
+  function setCustomDestination(name, lat, lon){
+    points = points.filter(function(p){ return p.id!=='auto_dest'; });
+    points.push({ id:'auto_dest', name:name, lat:lat, lon:lon, kind:'stop', reached:false });
+    updateStartDestLabel();
+    renderAll();
+  }
+
+  function searchDestination(query){
+    var results = document.getElementById('dest-search-results');
+    results.textContent = 'Suche läuft…';
+    fetch('https://nominatim.openstreetmap.org/search?format=json&limit=5&q=' + encodeURIComponent(query))
+      .then(function(r){ return r.json(); })
+      .then(function(list){
+        results.innerHTML = '';
+        if (!list.length){ results.textContent = 'Keine Treffer.'; return; }
+        list.forEach(function(item){
+          var b = document.createElement('button');
+          b.className = 'btn btn-ghost btn-block';
+          b.style.textAlign = 'left'; b.style.fontSize = '13px'; b.style.marginBottom = '6px';
+          b.textContent = item.display_name;
+          b.onclick = function(){
+            setCustomDestination(item.display_name.split(',')[0], parseFloat(item.lat), parseFloat(item.lon));
+            results.innerHTML = '';
+            document.getElementById('dest-search').value = '';
+          };
+          results.appendChild(b);
+        });
+      }).catch(function(){ results.textContent = 'Suche fehlgeschlagen.'; });
+  }
+
+  /* ---------------- Rendering ---------------- */
+  function renderAll(){ renderList(); renderMarkers(); renderStatus(); renderRouteOverview(); scheduleRoute(); }
+
+  function renderList(){
+    var ul = document.getElementById('pt-list');
+    ul.innerHTML = '';
+    var target = nextStop();
+    points.forEach(function(p){
+      var li = document.createElement('li');
+      li.dataset.id = p.id;
+      if (p.reached) li.className = 'reached';
+      else if (target && p.id === target.id) li.className = 'next';
+      var handle = document.createElement('div');
+      handle.className = 'pt-drag';
+      handle.textContent = '⠿';
+      var icon = document.createElement('div');
+      icon.className = 'pt-icon ' + p.kind;
+      if (p.kind === 'stop') icon.textContent = p.reached ? '✓' : '';
+      var name = document.createElement('div');
+      name.className = 'pt-name';
+      name.textContent = p.name + (p.kind==='stop' && isLastStop(p) && p.name!=='Endziel' ? ' (Endziel)' : '');
+      var toggle = document.createElement('button');
+      toggle.className = 'pt-kind-toggle';
+      toggle.textContent = p.kind === 'stop' ? 'Stopp' : 'Wegpunkt';
+      toggle.onclick = function(){ p.kind = p.kind==='stop' ? 'waypoint' : 'stop'; renderAll(); };
+      var del = document.createElement('button');
+      del.className = 'pt-del'; del.textContent = '✕';
+      del.onclick = function(){ points = points.filter(function(x){ return x.id!==p.id; }); renderAll(); };
+      li.appendChild(handle); li.appendChild(icon); li.appendChild(name); li.appendChild(toggle); li.appendChild(del);
+      ul.appendChild(li);
+      attachDragHandlers(li, handle);
+    });
+  }
+
+  /* Reihenfolge per Ziehen ändern – mit Pointer Events (funktioniert mit Finger UND Maus,
+     anders als natives HTML5 drag-and-drop, das auf Touchscreens i. d. R. nicht auslöst). */
+  var dragState = null;
+
+  // Liefert das Element, VOR dem eingefügt werden soll, oder null für "ans Ende".
+  // Bewusst ohne elementFromPoint: das gezogene Element selbst wird per transform an die
+  // Zeigerposition verschoben und läge dort optisch obendrauf - elementFromPoint würde dann
+  // fast immer das gezogene Element selbst statt des Nachbarn darunter zurückliefern.
+  function findDropTarget(container, y, dragEl){
+    var closest = null, closestOffset = -Infinity;
+    [].slice.call(container.children).forEach(function(el){
+      if (el === dragEl) return;
+      var rect = el.getBoundingClientRect();
+      var offset = y - (rect.top + rect.height / 2);
+      if (offset < 0 && offset > closestOffset){ closestOffset = offset; closest = el; }
+    });
+    return closest;
+  }
+
+  function attachDragHandlers(li, handle){
+    handle.addEventListener('pointerdown', function(e){
+      e.preventDefault();
+      try{ handle.setPointerCapture(e.pointerId); }catch(err){}
+      dragState = { pointerId:e.pointerId, startY:e.clientY };
+      li.classList.add('dragging');
+    });
+    handle.addEventListener('pointermove', function(e){
+      if (!dragState || dragState.pointerId !== e.pointerId) return;
+      var dy = e.clientY - dragState.startY;
+      li.style.transform = 'translateY(' + dy + 'px)';
+      var list = document.getElementById('pt-list');
+      var target = findDropTarget(list, e.clientY, li);
+      var moved = false;
+      if (target == null){
+        if (list.lastElementChild !== li){ list.appendChild(li); moved = true; }
+      } else if (target !== li.nextSibling){
+        list.insertBefore(li, target);
+        moved = true;
+      }
+      if (moved){ dragState.startY = e.clientY; li.style.transform = ''; }
+    });
+    function endDrag(e){
+      if (!dragState || dragState.pointerId !== e.pointerId) return;
+      li.classList.remove('dragging');
+      li.style.transform = '';
+      var order = [].slice.call(document.getElementById('pt-list').children).map(function(el){ return el.dataset.id; });
+      points.sort(function(a,b){ return order.indexOf(a.id) - order.indexOf(b.id); });
+      dragState = null;
+      renderAll();
+    }
+    handle.addEventListener('pointerup', endDrag);
+    handle.addEventListener('pointercancel', endDrag);
+  }
+
+  function renderMarkers(){
+    markers.forEach(function(m){ map.removeLayer(m); });
+    markers = [];
+    var target = nextStop();
+    points.forEach(function(p){
+      var color = p.reached ? '#38C172' : (target && p.id===target.id ? '#FFB020' : (p.kind==='stop' ? '#EDEFF2' : '#5C6577'));
+      var radius = p.kind === 'stop' ? (target && p.id===target.id ? 11 : 8) : 4;
+      var m = L.circleMarker([p.lat,p.lon], { radius:radius, color:color, fillColor:color, fillOpacity:p.kind==='stop'?0.95:0.6, weight:p.kind==='stop'?2:0 })
+        .bindPopup(p.name).addTo(map);
+      markers.push(m);
+    });
+    if (points.length && !tracking){
+      try{ map.fitBounds(L.latLngBounds(points.map(function(p){return [p.lat,p.lon];})), { padding:[60,60] }); }catch(e){}
+    }
+  }
+
+  function renderStatus(){
+    var target = nextStop();
+    var pillEl = document.getElementById('status-pill');
+    var kindTag = document.getElementById('pill-kind');
+    var nameEl = document.getElementById('pill-name');
+    if (!target && !points.length){
+      pillEl.style.display = 'none';
+    } else {
+      pillEl.style.display = 'flex';
+      if (!target){
+        kindTag.textContent = 'Route abgeschlossen';
+        nameEl.textContent = 'Alle Zwischenstopps erreicht';
+      } else {
+        kindTag.textContent = isLastStop(target) ? 'Endziel' : 'Nächster Zwischenstopp';
+        nameEl.textContent = target.name;
+      }
+    }
+    var trackBtn = document.getElementById('btn-track');
+    trackBtn.textContent = tracking ? '■' : '▶';
+    trackBtn.setAttribute('aria-label', tracking ? 'Tracking stoppen' : 'Tracking starten');
+    trackBtn.className = tracking ? 'fab-main stop' : 'fab-main';
+  }
+
+  function renderRouteOverview(){
+    var wrap = document.getElementById('route-overview');
+    wrap.innerHTML = '';
+    if (!points.length){ wrap.classList.remove('show'); return; }
+    wrap.classList.add('show');
+    var target = nextStop();
+    points.forEach(function(p, i){
+      if (i > 0) wrap.appendChild(Object.assign(document.createElement('div'), { className:'ro-line' }));
+      var dot = document.createElement('div');
+      dot.className = 'ro-dot' + (p.kind==='stop' ? ' stop' : '') + (p.reached ? ' reached' : (target && p.id===target.id ? ' current' : ''));
+      wrap.appendChild(dot);
+      if (i===0 || i===points.length-1){
+        var label = document.createElement('div');
+        label.className = 'ro-label';
+        label.textContent = p.name;
+        wrap.appendChild(label);
+      }
+    });
+  }
+
+  /* ---------------- Routing (OSRM, echte Straßenführung) ---------------- */
+  var routeTimer = null;
+  function scheduleRoute(){
+    if (routeTimer) clearTimeout(routeTimer);
+    routeTimer = setTimeout(fetchRoute, 400);
+  }
+  function fetchRoute(){
+    if (points.length < 2){
+      routeLine.setLatLngs(points.length===1 ? [[points[0].lat,points[0].lon]] : []);
+      return;
+    }
+    // OSRM erwartet lon,lat-Reihenfolge, ein Request für die gesamte Punktfolge
+    var coordStr = points.map(function(p){ return p.lon + ',' + p.lat; }).join(';');
+    var url = 'https://router.project-osrm.org/route/v1/driving/' + coordStr + '?overview=full&geometries=geojson';
+    fetch(url).then(function(r){ return r.json(); }).then(function(data){
+      if (data.code === 'Ok' && data.routes && data.routes[0]){
+        var coords = data.routes[0].geometry.coordinates.map(function(c){ return [c[1], c[0]]; });
+        routeLine.setLatLngs(coords);
+      } else {
+        // Fallback: Luftlinie zwischen den Punkten
+        routeLine.setLatLngs(points.map(function(p){ return [p.lat,p.lon]; }));
+      }
+    }).catch(function(){
+      routeLine.setLatLngs(points.map(function(p){ return [p.lat,p.lon]; }));
+    });
+  }
+
+  /* ---------------- GPX Import / Export ---------------- */
+  function parseGPX(text){
+    var doc = new DOMParser().parseFromString(text, 'application/xml');
+    if (doc.querySelector('parsererror')) throw new Error('GPX konnte nicht gelesen werden.');
+    var nodes = [].slice.call(doc.querySelectorAll('rtept, wpt'));
+    if (!nodes.length) throw new Error('Keine Wegpunkte (wpt/rtept) in der Datei gefunden.');
+    return nodes.map(function(n){
+      var nameEl = n.querySelector('name');
+      var isNamed = n.tagName.toLowerCase() === 'wpt'; // Konvention: wpt = benannter Stopp, rtept = Routenpunkt
+      return {
+        name: nameEl && nameEl.textContent.trim() ? nameEl.textContent.trim() : (isNamed ? 'Zwischenstopp' : 'Wegpunkt'),
+        lat: parseFloat(n.getAttribute('lat')),
+        lon: parseFloat(n.getAttribute('lon')),
+        kind: isNamed ? 'stop' : 'waypoint'
+      };
+    }).filter(function(p){ return isFinite(p.lat) && isFinite(p.lon); });
+  }
+
+  function loadGPXFile(file){
+    var reader = new FileReader();
+    reader.onload = function(){
+      try{
+        var pts = parseGPX(reader.result);
+        pts.forEach(function(p, i){ points.push({ id:uid(), name:p.name, lat:p.lat, lon:p.lon, kind:p.kind, reached:false }); });
+        if (points.length) points[points.length-1].kind = 'stop'; // letzter Punkt = Endziel, immer als Stopp behandelt
+        renderAll();
+      }catch(err){ alert('Import fehlgeschlagen: ' + err.message); }
+    };
+    reader.onerror = function(){ alert('Datei konnte nicht gelesen werden.'); };
+    reader.readAsText(file);
+  }
+
+  function exportGPX(){
+    if (!points.length){ alert('Keine Route zum Exportieren vorhanden.'); return; }
+    var body = points.map(function(p){
+      var tag = p.kind === 'stop' ? 'wpt' : 'rtept';
+      return '  <' + tag + ' lat="' + p.lat + '" lon="' + p.lon + '"><name>' + p.name.replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</name></' + tag + '>';
+    }).join('\n');
+    var gpx = '<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Kurvenkumpel">\n<rte>\n' + body + '\n</rte>\n</gpx>';
+    var blob = new Blob([gpx], { type:'application/gpx+xml' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'kurvenkumpel-route.gpx';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  }
+
+  /* ---------------- Geocoding (Nominatim) ---------------- */
+  function geocodeName(name){
+    return fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&q=' + encodeURIComponent(name))
+      .then(function(r){ return r.json(); })
+      .then(function(list){ return list && list[0] ? { lat:parseFloat(list[0].lat), lon:parseFloat(list[0].lon) } : null; })
+      .catch(function(){ return null; });
+  }
+
+  function searchAddress(query){
+    var results = document.getElementById('search-results');
+    results.textContent = 'Suche läuft…';
+    fetch('https://nominatim.openstreetmap.org/search?format=json&limit=5&q=' + encodeURIComponent(query))
+      .then(function(r){ return r.json(); })
+      .then(function(list){
+        results.innerHTML = '';
+        if (!list.length){ results.textContent = 'Keine Treffer.'; return; }
+        list.forEach(function(item){
+          var b = document.createElement('button');
+          b.className = 'btn btn-ghost btn-block';
+          b.style.textAlign='left'; b.style.fontSize='13px'; b.style.marginBottom='6px';
+          b.textContent = item.display_name;
+          b.onclick = function(){
+            document.getElementById('wp-name').value = item.display_name.split(',')[0];
+            document.getElementById('wp-lat').value = parseFloat(item.lat).toFixed(6);
+            document.getElementById('wp-lon').value = parseFloat(item.lon).toFixed(6);
+            results.innerHTML = '';
+          };
+          results.appendChild(b);
+        });
+      }).catch(function(){ results.textContent = 'Suche fehlgeschlagen.'; });
+  }
+
+  /* ---------------- Sprach-/KI-Routenplanung ---------------- */
+  var SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (SpeechRec){
+    recog = new SpeechRec();
+    recog.lang = 'de-DE';
+    recog.interimResults = true;
+    recog.continuous = false;
+    recog.onresult = function(e){
+      var text = '';
+      for (var i=0;i<e.results.length;i++) text += e.results[i][0].transcript;
+      document.getElementById('ai-desc').value = text;
+    };
+    recog.onend = function(){ document.getElementById('btn-mic').classList.remove('live'); };
+    recog.onerror = function(){ document.getElementById('btn-mic').classList.remove('live'); };
+  } else {
+    document.getElementById('mic-hint').textContent = 'Spracherkennung wird von diesem Browser nicht unterstützt (funktioniert z. B. in Chrome/Android, nicht in Firefox). Text bitte direkt eintippen.';
+    document.getElementById('btn-mic').style.display = 'none';
+  }
+
+  document.getElementById('btn-mic').onclick = function(){
+    if (!recog) return;
+    this.classList.add('live');
+    try{ recog.start(); }catch(e){ /* laeuft ggf. bereits */ }
+  };
+
+  var AI_SYSTEM_PROMPT = [
+    'Du planst Motorrad-Touren für einen erfahrenen Fahrer. Antworte AUSSCHLIESSLICH mit JSON, ohne Markdown-Codeblock, ohne Erklärtext davor oder danach.',
+    'JSON-Schema: {"route_summary": string, "points": [{"name": string, "kind": "waypoint"|"stop", "reason": string}]}.',
+    'Regeln:',
+    '- "points" ist die geordnete Abfolge von Start bis Ziel.',
+    '- "waypoint" = dient nur der Streckenführung (z. B. Pass, Ortsdurchfahrt), keine Pause nötig.',
+    '- "stop" = tatsächlicher Halt/Pause. Der letzte Eintrag der gesamten Liste MUSS kind="stop" sein (Endziel).',
+    '- Schlage Pausen in sinnvollem Abstand vor (grob alle 1,5-2,5 Stunden bzw. 120-200 km Fahrzeit, auf kurvigen/alpinen Strecken kürzere Abstände).',
+    '- Nenne bei "reason" nur die Art des Stopps (z. B. Tankmöglichkeit, Aussichtspunkt, Ortschaft mit Gastronomie, Passhöhe), NIEMALS konkrete, nicht verifizierbare Namen von Restaurants, Hotels oder Öffnungszeiten.',
+    '- Verwende ausschließlich real existierende, allgemein bekannte Orts-, Pass-, See- oder Regionsnamen, die sich über eine Kartensuche auffinden lassen. Erfinde keine Orte.',
+    '- Maximal 10 Punkte insgesamt.'
+  ].join('\n');
+
+  function callClaude(userText){
+    var body = JSON.stringify({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 1000,
+      system: AI_SYSTEM_PROMPT,
+      messages: [{ role:'user', content: userText }]
+    });
+
+    function extractJSON(data){
+      var text = (data.content || []).filter(function(b){ return b.type==='text'; }).map(function(b){ return b.text; }).join('\n');
+      var cleaned = text.replace(/```json|```/g, '').trim();
+      return JSON.parse(cleaned);
+    }
+
+    // 1. Versuch: Artefakt-Modus (funktioniert nur innerhalb eines Claude-Chats, kein Key nötig)
+    return fetch('https://api.anthropic.com/v1/messages', {
+      method:'POST', headers:{ 'Content-Type':'application/json' }, body:body
+    }).then(function(r){ return r.json(); }).then(extractJSON)
+    .catch(function(artifactErr){
+      var key = document.getElementById('api-key').value.trim();
+      if (!key) throw new Error('Kein Zugriff auf die Anthropic-API. Diese Seite läuft nicht als Claude-Artefakt – bitte entweder dort öffnen oder in den Einstellungen einen eigenen API-Key eintragen.');
+      // 2. Versuch: eigener Key, direkter Browser-Call (nur für selbst gehostete Nutzung)
+      return fetch('https://api.anthropic.com/v1/messages', {
+        method:'POST',
+        headers:{
+          'Content-Type':'application/json',
+          'x-api-key': key,
+          'anthropic-version':'2023-06-01',
+          'anthropic-dangerous-direct-browser-access':'true'
+        },
+        body:body
+      }).then(function(r){ return r.json(); }).then(extractJSON);
+    });
+  }
+
+  document.getElementById('btn-ai-plan').onclick = function(){
+    var desc = document.getElementById('ai-desc').value.trim();
+    var statusEl = document.getElementById('ai-status');
+    var resultEl = document.getElementById('ai-result');
+    if (!desc){ alert('Bitte zuerst die gewünschte Strecke beschreiben.'); return; }
+    statusEl.innerHTML = '<span class="badge-status ok">Streckenvorschlag wird erstellt…</span>';
+    resultEl.innerHTML = '';
+    callClaude(desc).then(function(plan){
+      if (!plan || !Array.isArray(plan.points) || !plan.points.length) throw new Error('Antwort enthielt keine gültige Routenstruktur.');
+      statusEl.innerHTML = '<span class="badge-status ok">' + (plan.route_summary || 'Vorschlag erstellt') + '</span>';
+      // Sequenziell geokodieren (Nominatim: max. 1 Anfrage/Sekunde)
+      var resolved = [];
+      var skipped = [];
+      var chain = Promise.resolve();
+      plan.points.forEach(function(pt){
+        chain = chain.then(function(){
+          return geocodeName(pt.name).then(function(loc){
+            if (loc) resolved.push({ name:pt.name, kind: pt.kind==='waypoint' ? 'waypoint':'stop', reason:pt.reason, lat:loc.lat, lon:loc.lon });
+            else skipped.push(pt.name);
+            return sleep(1100);
+          });
+        });
+      });
+      chain.then(function(){
+        resultEl.innerHTML = resolved.map(function(p){
+          return '<div class="pt"><b>' + p.name + '</b> (' + (p.kind==='stop'?'Zwischenstopp':'Wegpunkt') + ')<div class="r">' + (p.reason||'') + '</div></div>';
+        }).join('') + (skipped.length ? '<p class="note">Nicht gefunden, nicht übernommen: ' + skipped.join(', ') + '</p>' : '');
+        if (resolved.length){
+          var btn = document.createElement('button');
+          btn.className = 'btn btn-primary btn-block';
+          btn.style.marginTop = '10px';
+          btn.textContent = 'Vorschlag als Route übernehmen (ersetzt aktuelle Route)';
+          btn.onclick = function(){
+            points = resolved.map(function(p){ return { id:uid(), name:p.name, lat:p.lat, lon:p.lon, kind:p.kind, reached:false }; });
+            if (points.length) points[points.length-1].kind = 'stop';
+            renderAll();
+            closeSheets();
+          };
+          resultEl.appendChild(btn);
+        }
+      });
+    }).catch(function(err){
+      statusEl.innerHTML = '<span class="badge-status err">' + err.message + '</span>';
+    });
+  };
+
+  /* ---------------- Tracking ---------------- */
+  function startTracking(){
+    if (!('geolocation' in navigator)){ alert('Geolocation wird von diesem Browser nicht unterstützt.'); return; }
+    if (!points.some(function(p){ return p.kind==='stop'; })){ alert('Bitte zuerst mindestens einen Zwischenstopp/Endziel festlegen.'); return; }
+    tracking = true; renderStatus();
+    if ('wakeLock' in navigator){ navigator.wakeLock.request('screen').then(function(wl){ wakeLock = wl; }).catch(function(){}); }
+    watchId = navigator.geolocation.watchPosition(onPosition, onPositionError, { enableHighAccuracy:true, maximumAge:0, timeout:15000 });
+  }
+  function stopTracking(){
+    tracking = false; renderStatus();
+    if (watchId!==null){ navigator.geolocation.clearWatch(watchId); watchId=null; }
+    if (wakeLock){ wakeLock.release().catch(function(){}); wakeLock=null; }
+  }
+  function onPositionError(err){ document.getElementById('pill-kind').textContent = 'GPS-Fehler: ' + err.message; }
+
+  function onPosition(pos){
+    var lat=pos.coords.latitude, lon=pos.coords.longitude;
+    if (meMarker) map.removeLayer(meMarker);
+    meMarker = L.circleMarker([lat,lon], { radius:7, color:'#EDEFF2', fillColor:'#2FB6C4', fillOpacity:1, weight:2 }).addTo(map);
+    map.panTo([lat,lon]);
+    var target = nextStop();
+    if (!target) return;
+    var d = distMeters(lat,lon,target.lat,target.lon);
+    document.getElementById('pill-dist').innerHTML = Math.round(d) + ' <small>m</small>';
+    if (d <= settings.radius) handleArrival(target);
+  }
+
+  function handleArrival(target){
+    target.reached = true;
+    vibrate([200,100,200,100,200]);
+    var next = nextStop();
+    var last = isLastStop(target);
+    speak((last ? 'Endziel ' : 'Zwischenstopp ') + target.name + ' erreicht.' + (next ? ' Nächster Halt: ' + next.name + '.' : ' Tour beendet.'));
+    renderAll();
+    document.getElementById('arrival-reached-name').textContent = target.name;
+    var navBtn = document.getElementById('btn-continue-nav');
+    if (next){
+      document.getElementById('arrival-next-name').textContent = 'Weiter zu: ' + next.name;
+      navBtn.style.display = 'block';
+    } else {
+      document.getElementById('arrival-next-name').textContent = 'Letzter Zwischenstopp erreicht – Tour beendet';
+      navBtn.style.display = 'none';
+    }
+    document.getElementById('arrival').classList.add('show');
+  }
+
+  function closeArrival(withNav){
+    var next = nextStop();
+    if (withNav && next){ try{ window.open(navUrl(next), '_blank'); }catch(e){} }
+    document.getElementById('arrival').classList.remove('show');
+  }
+
+  /* ---------------- UI wiring ---------------- */
+  function openSheet(id){ closeSheets(); document.getElementById(id).classList.add('show'); document.getElementById('backdrop').classList.add('show'); }
+  function closeSheets(){ document.querySelectorAll('.sheet').forEach(function(s){ s.classList.remove('show'); }); document.getElementById('backdrop').classList.remove('show'); }
+  document.getElementById('backdrop').onclick = closeSheets;
+  document.querySelectorAll('.close-sheet').forEach(function(b){ b.onclick = closeSheets; });
+
+  document.getElementById('btn-list-open').onclick = function(){ openSheet('sheet-route'); };
+  document.getElementById('btn-mic-open').onclick = function(){ openSheet('sheet-ai'); };
+  document.getElementById('btn-open-settings').onclick = function(){ openSheet('sheet-settings'); };
+  document.getElementById('btn-add-open').onclick = function(){ openSheet('sheet-add'); };
+
+  document.getElementById('radius').oninput = function(e){ settings.radius = parseInt(e.target.value,10); document.getElementById('radius-val').textContent = settings.radius; };
+  document.getElementById('chk-voice').onchange = function(e){ settings.voice = e.target.checked; };
+
+  document.getElementById('btn-gpx').onclick = function(){ document.getElementById('gpx-input').click(); };
+  document.getElementById('gpx-input').onchange = function(e){ if (e.target.files[0]) loadGPXFile(e.target.files[0]); closeSheets(); e.target.value=''; };
+  document.getElementById('btn-gpx-export').onclick = exportGPX;
+  document.getElementById('btn-file-menu').onclick = function(){
+    var m = document.getElementById('file-menu');
+    m.style.display = (m.style.display === 'none' || !m.style.display) ? 'flex' : 'none';
+  };
+
+  document.getElementById('btn-search').onclick = function(){ var q=document.getElementById('search-addr').value.trim(); if (q) searchAddress(q); };
+
+  document.getElementById('kind-waypoint').onclick = function(){ pendingKind='waypoint'; document.getElementById('kind-current').textContent='Wegpunkt'; };
+  document.getElementById('kind-stop').onclick = function(){ pendingKind='stop'; document.getElementById('kind-current').textContent='Zwischenstopp'; };
+
+  document.getElementById('btn-save-wp').onclick = function(){
+    var name = document.getElementById('wp-name').value.trim() || (pendingKind==='stop' ? 'Zwischenstopp' : 'Wegpunkt');
+    var lat = parseFloat(document.getElementById('wp-lat').value);
+    var lon = parseFloat(document.getElementById('wp-lon').value);
+    if (!isFinite(lat) || !isFinite(lon)){ alert('Bitte gültige Koordinaten angeben oder auf die Karte tippen.'); return; }
+    points.push({ id:uid(), name:name, lat:lat, lon:lon, kind:pendingKind, reached:false });
+    document.getElementById('wp-name').value=''; document.getElementById('wp-lat').value=''; document.getElementById('wp-lon').value='';
+    document.getElementById('search-results').innerHTML='';
+    renderAll(); closeSheets();
+  };
+
+  document.getElementById('btn-track').onclick = function(){ tracking ? stopTracking() : startTracking(); };
+  document.getElementById('btn-continue-nav').onclick = function(){ closeArrival(true); };
+  document.getElementById('btn-continue-only').onclick = function(){ closeArrival(false); };
+
+  document.getElementById('btn-use-here').onclick = function(){
+    var btn = this; var original = btn.textContent;
+    btn.disabled = true; btn.textContent = 'Ermittle…';
+    captureOnce().then(function(pos){
+      currentPos = pos;
+      refreshStartDestinationPoints();
+    }).catch(function(err){
+      alert('Standort konnte nicht ermittelt werden: ' + err.message);
+    }).then(function(){ btn.disabled = false; btn.textContent = original; });
+  };
+
+  document.getElementById('btn-use-home').onclick = function(){
+    if (homePos){ refreshStartDestinationPoints(); return; }
+    var btn = this; var original = btn.textContent;
+    btn.disabled = true; btn.textContent = 'Ermittle…';
+    captureOnce().then(function(pos){
+      saveHome(pos);
+      refreshStartDestinationPoints();
+    }).catch(function(err){
+      alert('Standort konnte nicht ermittelt werden: ' + err.message);
+    }).then(function(){ btn.disabled = false; btn.textContent = original; });
+  };
+
+  document.getElementById('btn-swap-dir').onclick = function(){
+    routeMode.startIsHome = !routeMode.startIsHome;
+    refreshStartDestinationPoints();
+  };
+
+  document.getElementById('btn-dest-search').onclick = function(){
+    var q = document.getElementById('dest-search').value.trim();
+    if (q) searchDestination(q);
+  };
+
+  document.getElementById('btn-clear-home').onclick = function(){
+    homePos = null;
+    try{ localStorage.removeItem('kurvenkumpel_home'); }catch(e){}
+    updateStartDestLabel();
+    alert('Zuhause-Position gelöscht.');
+  };
+
+  document.getElementById('btn-locate').onclick = function(){
+    var btn = this;
+    btn.disabled = true; btn.style.opacity = '.5';
+    captureOnce().then(function(pos){
+      placeMeMarker(pos);
+    }).catch(function(err){
+      alert('Standort konnte nicht ermittelt werden: ' + err.message);
+    }).then(function(){ btn.disabled = false; btn.style.opacity = '1'; });
+  };
+
+  updateStartDestLabel();
+  renderAll();
+})();
+</script>
+</body>
+</html>
