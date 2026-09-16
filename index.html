@@ -37,6 +37,12 @@
   .leaflet-overlay-pane, .leaflet-marker-pane, .leaflet-popup-pane, .leaflet-tooltip-pane{
     filter:invert(1) hue-rotate(220deg);
   }
+  /* Satellitenbilder sollen in echten Farben erscheinen statt dunkel invertiert zu werden -
+     dieselbe Umkehrung muss dann auch bei den eigenen Markern/Routen entfallen, sonst passen
+     deren Farben nicht mehr zusammen. */
+  html.satellite-mode .leaflet-tile-pane{ filter:none; }
+  html.satellite-mode .leaflet-overlay-pane, html.satellite-mode .leaflet-marker-pane,
+  html.satellite-mode .leaflet-popup-pane, html.satellite-mode .leaflet-tooltip-pane{ filter:none; }
   .leaflet-control-attribution{ background:var(--panel) !important; color:var(--text-dim) !important; font-size:10px !important;}
   .leaflet-control-attribution a{ color:var(--text-dim) !important; }
   .leaflet-control-zoom a{ background:var(--panel-solid) !important; color:var(--text) !important; border-color:var(--line) !important; }
@@ -180,9 +186,9 @@
   html.platform-android #poi-toggles{ bottom:calc(14px + env(safe-area-inset-bottom) + 146px); }
   #btn-newroute-open{
     position:absolute; right:14px; z-index:500;
-    bottom:calc(14px + env(safe-area-inset-bottom) + 340px);
+    bottom:calc(14px + env(safe-area-inset-bottom) + 408px);
   }
-  html.platform-android #btn-newroute-open{ bottom:calc(14px + env(safe-area-inset-bottom) + 350px); }
+  html.platform-android #btn-newroute-open{ bottom:calc(14px + env(safe-area-inset-bottom) + 418px); }
 
   .poi-toggle{ position:relative; }
   .poi-toggle::after{
@@ -402,6 +408,7 @@
   <button class="fab poi-toggle" id="btn-poi-coffee" aria-label="Kaffeepausen anzeigen"><span data-icon="coffee" style="width:22px;height:22px;"></span></button>
   <button class="fab poi-toggle" id="btn-poi-fuel" aria-label="Tankstellen anzeigen"><span data-icon="fuel" style="width:22px;height:22px;"></span></button>
   <button class="fab poi-toggle" id="btn-poi-hairpins" aria-label="Spitzkehren anzeigen"><span data-icon="hairpin" style="width:22px;height:22px;"></span></button>
+  <button class="fab poi-toggle" id="btn-satellite" aria-label="Satellitenansicht umschalten"><span data-icon="globe" style="width:22px;height:22px;"></span></button>
 </div>
 <button class="fab" id="btn-newroute-open" aria-label="Neue Route planen"><span data-icon="plus" style="width:22px;height:22px;"></span></button>
 
@@ -610,6 +617,7 @@
     hairpin: '<svg viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"><path d="M64 208V104a56 56 0 0 1 112 0v24"/><path d="M144 96l32 32 32-32"/></svg>',
     ruler: '<svg viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"><rect x="32" y="96" width="192" height="64" rx="8"/><path d="M72 96v20M104 96v28M136 96v20M168 96v28M200 96v20"/></svg>',
     gravel: '<svg viewBox="0 0 256 256" fill="currentColor"><circle cx="64" cy="140" r="22"/><circle cx="130" cy="120" r="28"/><circle cx="196" cy="146" r="20"/></svg>',
+    globe: '<svg viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="14"><circle cx="128" cy="128" r="96"/><ellipse cx="128" cy="128" rx="40" ry="96"/><path d="M32 128h192"/><path d="M50 82h156M50 174h156"/></svg>',
     fuel: '<svg viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"><rect x="48" y="40" width="104" height="176" rx="8"/><rect x="68" y="64" width="64" height="48" rx="4"/><path d="M152 96h20a20 20 0 0 1 20 20v72a16 16 0 0 1-32 0v-40"/></svg>'
   };
   function iconHTML(name, px){
@@ -680,9 +688,21 @@
 
   /* ---------------- Map ---------------- */
   var map = L.map('map', { zoomControl:true, attributionControl:true }).setView([47.5, 11.0], 7);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  var osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19, attribution: '&copy; OpenStreetMap-Mitwirkende &middot; Routing: OSRM/FOSSGIS'
   }).addTo(map);
+  // Esri World Imagery: frei zugängliches Satellitenbild-Kachelangebot ohne API-Key, {z}/{y}/{x}
+  // Reihenfolge beachten (ArcGIS-REST-Konvention, nicht die sonst übliche {z}/{x}/{y}).
+  var satLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    maxZoom: 19, attribution: 'Kacheln &copy; Esri, Maxar, Earthstar Geographics'
+  });
+  var satelliteOn = false;
+  function toggleSatellite(){
+    satelliteOn = !satelliteOn;
+    if (satelliteOn){ map.removeLayer(osmLayer); satLayer.addTo(map); document.documentElement.classList.add('satellite-mode'); }
+    else { map.removeLayer(satLayer); osmLayer.addTo(map); document.documentElement.classList.remove('satellite-mode'); }
+    document.getElementById('btn-satellite').classList.toggle('active', satelliteOn);
+  }
 
   var routeLine = L.polyline([], { color:'#9184d9', weight:4, opacity:.9 }).addTo(map);
   var markers = [];
@@ -1915,6 +1935,7 @@
   document.getElementById('btn-poi-coffee').onclick = function(){ togglePoi('coffee', this); };
   document.getElementById('btn-poi-fuel').onclick = function(){ togglePoi('fuel', this); };
   document.getElementById('btn-poi-hairpins').onclick = function(){ togglePoi('hairpins', this); };
+  document.getElementById('btn-satellite').onclick = toggleSatellite;
   document.getElementById('btn-continue-nav').onclick = function(){ closeArrival(true); };
   document.getElementById('btn-continue-only').onclick = function(){ closeArrival(false); };
 
