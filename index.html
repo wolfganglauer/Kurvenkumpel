@@ -57,6 +57,11 @@
   .poi-marker.coffee{ background:#3f2a1d; color:#f3e5d8; }
   .poi-marker.fuel{ background:#a8d8ef; color:#0d2b3d; }
   .poi-marker.hairpin{ background:#f2883f; color:#3a1a00; }
+  .me-marker{
+    width:56px; height:38px; display:flex; align-items:center; justify-content:center;
+    background:rgba(233,233,237,.94); border-radius:16px; border:2.5px solid #9184d9;
+    box-shadow:0 2px 8px rgba(0,0,0,.55);
+  }
   /* Zoom-/Attribution-Steuerung von Leaflet liegt standardmäßig über allem (z-index 1000) und
      überdeckte sonst Text in Status-Pille/Aktionsleiste – deshalb hier wegschieben statt überlagern. */
   .leaflet-top{ margin-top:calc(132px + env(safe-area-inset-top)); z-index:150 !important; }
@@ -658,8 +663,8 @@
   function motorcycleDivIcon(){
     return L.divIcon({
       className: '',
-      html: MOTORCYCLE_SVG,
-      iconSize: [42, 24], iconAnchor: [21, 12]
+      html: '<div class="me-marker">' + MOTORCYCLE_SVG + '</div>',
+      iconSize: [56, 38], iconAnchor: [28, 19]
     });
   }
 
@@ -759,7 +764,7 @@
       drawState.active = true;
       drawState.points = [[currentPos.lat, currentPos.lon]];
       if (drawState.polyline) map.removeLayer(drawState.polyline);
-      drawState.polyline = L.polyline(drawState.points, { color:'#9184d9', weight:4, opacity:.85, dashArray:'2,8' }).addTo(map);
+      drawState.polyline = L.polyline(drawState.points, { color:'#FFB020', weight:6, opacity:.95 }).addTo(map);
       map.dragging.disable();
       document.getElementById('draw-hint').classList.add('show');
     };
@@ -2067,6 +2072,7 @@
       // zwischenzeitliche eigene Eingabe.
       captureOnce().then(function(pos){
         currentPos = pos;
+        placeMeMarker(pos);
         if (!startField.value){
           startField.value = 'Aktueller Standort';
           nrStartResolved = { name:'Aktueller Standort', lat:pos.lat, lon:pos.lon };
@@ -2114,6 +2120,8 @@
     captureOnce().then(function(pos){
       saveHome(pos);
       btn.textContent = 'Zuhause gespeichert ✓';
+      currentPos = pos;
+      placeMeMarker(pos);
     }).catch(function(){
       btn.disabled = false; btn.textContent = 'Aktuellen Standort verwenden';
       alert('Standort konnte nicht ermittelt werden. Du kannst das später in den Einstellungen nachholen.');
@@ -2121,9 +2129,11 @@
   };
   document.getElementById('btn-ob-loc').onclick = function(){
     var btn = this;
-    captureOnce().then(function(){
+    captureOnce().then(function(pos){
       btn.textContent = 'Erlaubt'; btn.disabled = true;
       document.getElementById('ob-perm-loc').classList.add('granted');
+      currentPos = pos;
+      placeMeMarker(pos);
     }).catch(function(){ /* abgelehnt/fehlgeschlagen - laesst sich spaeter jederzeit ueber den Standort-Button nachholen */ });
   };
   document.getElementById('btn-ob-mic').onclick = function(){
