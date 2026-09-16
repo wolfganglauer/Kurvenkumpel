@@ -57,10 +57,13 @@
   .poi-marker.coffee{ background:#3f2a1d; color:#f3e5d8; }
   .poi-marker.fuel{ background:#a8d8ef; color:#0d2b3d; }
   .poi-marker.hairpin{ background:#f2883f; color:#3a1a00; }
-  .me-marker{
-    width:56px; height:38px; display:flex; align-items:center; justify-content:center;
-    background:rgba(233,233,237,.94); border-radius:16px; border:2.5px solid #9184d9;
-    box-shadow:0 2px 8px rgba(0,0,0,.55);
+  .me-dot-halo{
+    display:flex; align-items:center; justify-content:center;
+    background:rgba(66,133,244,.28); border-radius:50%;
+  }
+  .me-dot{
+    background:#4285F4; border-radius:50%; border:2.5px solid #fff;
+    box-shadow:0 1px 5px rgba(0,0,0,.6);
   }
   /* Zoom-/Attribution-Steuerung von Leaflet liegt standardmäßig über allem (z-index 1000) und
      überdeckte sonst Text in Status-Pille/Aktionsleiste – deshalb hier wegschieben statt überlagern. */
@@ -640,31 +643,21 @@
     });
   }
 
-  // Live-Standort: stilisierte Sport-Tourer-Silhouette (CBR1100XX-Proportionen: lange, niedrige
-  // Verkleidung, hohe Frontscheibe) im Comicstil - aus einfachen Grundformen zusammengesetzt, keine
-  // originalgetreue technische Zeichnung. Feste Blickrichtung, dreht sich nicht mit der Fahrtrichtung.
-  var MOTORCYCLE_SVG =
-    '<svg viewBox="0 0 200 110" width="42" height="24">' +
-      '<ellipse cx="100" cy="98" rx="90" ry="6" fill="#000" opacity="0.25"/>' +
-      '<rect x="20" y="72" width="35" height="10" rx="5" fill="#c9ccd1"/>' +
-      '<circle cx="45" cy="80" r="26" fill="#17181d" stroke="#e9e9ed" stroke-width="3"/>' +
-      '<circle cx="45" cy="80" r="10" fill="none" stroke="#9184d9" stroke-width="2"/>' +
-      '<circle cx="155" cy="80" r="26" fill="#17181d" stroke="#e9e9ed" stroke-width="3"/>' +
-      '<circle cx="155" cy="80" r="10" fill="none" stroke="#9184d9" stroke-width="2"/>' +
-      '<rect x="60" y="62" width="80" height="22" rx="4" fill="#17181d"/>' +
-      '<path d="M55,64 L70,40 L100,32 L135,34 L155,46 L150,64 Z" fill="#9184d9"/>' +
-      '<path d="M128,34 L150,20 L156,44 Z" fill="#cfe8f5" fill-opacity="0.8"/>' +
-      '<line x1="118" y1="34" x2="122" y2="21" stroke="#17181d" stroke-width="3" stroke-linecap="round"/>' +
-      '<circle cx="123" cy="19" r="3" fill="#17181d"/>' +
-      '<line x1="150" y1="60" x2="156" y2="52" stroke="#17181d" stroke-width="6" stroke-linecap="round"/>' +
-      '<circle cx="153" cy="49" r="4" fill="#fbe8a6"/>' +
-      '<rect x="47" y="58" width="8" height="5" rx="1" fill="#E5484D"/>' +
-    '</svg>';
-  function motorcycleDivIcon(){
+  // Live-Standort: typischer "blauer Punkt" (wie in gängigen Navigations-Apps) statt Symbol -
+  // Radius passt sich dem Zoomlevel an, damit er sowohl weit herausgezoomt als auch nah dran gut
+  // erkennbar bleibt: größer bei niedrigem Zoom (Übersicht), kleiner bei hohem Zoom (Detailansicht,
+  // soll die Straße darunter nicht verdecken).
+  function meDotRadius(zoom){
+    return Math.max(9, Math.min(15, 24 - zoom * 0.7));
+  }
+  function meDotIcon(zoom){
+    var r = meDotRadius(zoom);
+    var halo = r * 2.2;
     return L.divIcon({
       className: '',
-      html: '<div class="me-marker">' + MOTORCYCLE_SVG + '</div>',
-      iconSize: [56, 38], iconAnchor: [28, 19]
+      html: '<div class="me-dot-halo" style="width:' + halo + 'px;height:' + halo + 'px;">' +
+              '<div class="me-dot" style="width:' + r + 'px;height:' + r + 'px;"></div></div>',
+      iconSize: [halo, halo], iconAnchor: [halo/2, halo/2]
     });
   }
 
@@ -710,6 +703,9 @@
   }
 
   var routeLine = L.polyline([], { color:'#9184d9', weight:4, opacity:.9 }).addTo(map);
+  map.on('zoomend', function(){
+    if (meMarker) meMarker.setIcon(meDotIcon(map.getZoom()));
+  });
   var markers = [];
 
   var drawState = { active:false, dragging:false, points:[], polyline:null };
@@ -766,6 +762,7 @@
       if (drawState.polyline) map.removeLayer(drawState.polyline);
       drawState.polyline = L.polyline(drawState.points, { color:'#FFB020', weight:6, opacity:.95 }).addTo(map);
       map.dragging.disable();
+      map.getContainer().style.touchAction = 'none';
       document.getElementById('draw-hint').classList.add('show');
     };
     if (currentPos){ proceed(); }
@@ -787,6 +784,7 @@
     if (drawState.polyline){ map.removeLayer(drawState.polyline); drawState.polyline = null; }
     drawState.points = [];
     map.dragging.enable();
+    map.getContainer().style.touchAction = '';
     document.getElementById('draw-hint').classList.remove('show');
   }
 
@@ -794,6 +792,7 @@
     if (!drawState.active) return;
     drawState.active = false;
     map.dragging.enable();
+    map.getContainer().style.touchAction = '';
     document.getElementById('draw-hint').classList.remove('show');
     if (drawState.polyline){ map.removeLayer(drawState.polyline); drawState.polyline = null; }
 
@@ -825,20 +824,31 @@
     showStartToast();
   }
 
-  // Leaflet normalisiert Maus- und Touch-Gesten auf dieselben Kartenereignisse.
-  map.on('mousedown', function(e){
+  // Bewusst native Pointer-Events statt Leaflets abstrahierter map.on('mousemove', ...)-Ereignisse:
+  // Leaflets eigene Maus-/Touch-Synthese ist eng mit dem (hier deaktivierten) dragging-Handler
+  // verzahnt und lieferte beim Zeichnen keine zuverlässigen Bewegungsereignisse. setPointerCapture
+  // garantiert, dass Bewegungsereignisse beim Ziehen ankommen - dieselbe Technik wie beim Umsortieren
+  // der Punkteliste per Drag&Drop.
+  var mapContainer = map.getContainer();
+  mapContainer.addEventListener('pointerdown', function(e){
     if (!drawState.active) return;
+    e.preventDefault();
     drawState.dragging = true;
+    try{ mapContainer.setPointerCapture(e.pointerId); }catch(err){}
   });
-  map.on('mousemove', function(e){
+  mapContainer.addEventListener('pointermove', function(e){
     if (!drawState.active || !drawState.dragging) return;
-    drawAddPoint(e.latlng);
+    var latlng = map.containerPointToLatLng(map.mouseEventToContainerPoint(e));
+    drawAddPoint(latlng);
   });
-  map.on('mouseup', function(){
+  function endDrawPointer(e){
     if (!drawState.active || !drawState.dragging) return;
     drawState.dragging = false;
+    try{ mapContainer.releasePointerCapture(e.pointerId); }catch(err){}
     finishDrawMode();
-  });
+  }
+  mapContainer.addEventListener('pointerup', endDrawPointer);
+  mapContainer.addEventListener('pointercancel', endDrawPointer);
 
   /* ---------------- Helpers ---------------- */
   function uid(){ return 'p_' + Math.random().toString(36).slice(2,9); }
@@ -1008,7 +1018,7 @@
   // damit die bereits getestete Tracking-Logik unangetastet bleibt.
   function placeMeMarker(pos){
     if (meMarker) map.removeLayer(meMarker);
-    meMarker = L.marker([pos.lat, pos.lon], { icon: motorcycleDivIcon() }).addTo(map);
+    meMarker = L.marker([pos.lat, pos.lon], { icon: meDotIcon(map.getZoom()) }).addTo(map);
     map.setView([pos.lat, pos.lon], Math.max(map.getZoom(), 14));
   }
 
@@ -1846,7 +1856,7 @@
     lastKnownPos = { lat:lat, lon:lon };
     lastKnownSpeed = pos.coords.speed;
     if (meMarker) map.removeLayer(meMarker);
-    meMarker = L.marker([lat,lon], { icon: motorcycleDivIcon() }).addTo(map);
+    meMarker = L.marker([lat,lon], { icon: meDotIcon(map.getZoom()) }).addTo(map);
     map.panTo([lat,lon]);
     renderRouteOverview();
     updateRouteETA();
