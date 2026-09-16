@@ -140,6 +140,7 @@
   #start-toast span{ color:var(--accent-ink); font-size:14px; font-weight:600; }
   #start-toast button{ font-size:13px; font-weight:600; border-radius:10px; padding:7px 12px; }
   #start-toast #btn-toast-start{ background:var(--accent-ink); color:var(--accent); }
+  #start-toast #btn-toast-undo{ background:rgba(6,9,13,.25); color:var(--accent-ink); border:1px solid rgba(6,9,13,.4); }
   #start-toast #btn-toast-dismiss{ background:none; color:var(--accent-ink); opacity:.7; padding:7px 6px; }
 
   .nr-switch{ display:flex; background:var(--panel-solid); border:1px solid var(--line); border-radius:10px; padding:3px; margin-bottom:14px; gap:3px; }
@@ -397,6 +398,7 @@
   <div id="start-toast">
     <span>Route bereit</span>
     <span style="flex:1;"></span>
+    <button id="btn-toast-undo" style="display:none;">Rückgängig</button>
     <button id="btn-toast-dismiss" aria-label="Verwerfen"><span data-icon="close" style="width:14px;height:14px;"></span></button>
     <button id="btn-toast-start"><span data-icon="play" style="width:14px;height:14px;margin-right:6px;"></span>Starten</button>
   </div>
@@ -802,7 +804,12 @@
 
     var startLL = [currentPos.lat, currentPos.lon];
     var lastLL = raw[raw.length-1];
-    var closed = distMeters(startLL[0], startLL[1], lastLL[0], lastLL[1]) <= DRAW_CLOSE_THRESHOLD_M;
+    // Fester Meterwert wäre beim Herauszoomen nur noch wenige Bildschirmpixel breit und damit kaum
+    // noch treffbar. Stattdessen: Mindestens ~45 Bildschirm-Pixel Toleranz, umgerechnet über die
+    // Web-Mercator-Auflösung am aktuellen Zoom/Breitengrad, nie kleiner als der bisherige Festwert.
+    var mpp = 156543.03392 * Math.cos(startLL[0] * Math.PI/180) / Math.pow(2, map.getZoom());
+    var closeThresholdM = Math.max(DRAW_CLOSE_THRESHOLD_M, mpp * 45);
+    var closed = distMeters(startLL[0], startLL[1], lastLL[0], lastLL[1]) <= closeThresholdM;
 
     var simplified = douglasPeucker(raw, DRAW_SIMPLIFY_EPSILON_M);
     simplified[0] = startLL; // Start immer exakt die echte Position, nicht der Skizzenbeginn
@@ -821,6 +828,7 @@
     }
     points = newPoints;
     renderAll();
+    lastRouteWasDrawn = true;
     showStartToast();
   }
 
@@ -1007,6 +1015,7 @@
         points = entry.points.map(function(p){ return { id:uid(), name:p.name, lat:p.lat, lon:p.lon, kind:p.kind, reached:false }; });
         renderAll();
         closeSheets();
+        lastRouteWasDrawn = false;
         showStartToast();
       };
       row.appendChild(b);
@@ -1078,11 +1087,13 @@
 
   /* ---------------- Toast "Route bereit" ---------------- */
   var startToastTimer = null;
+  var lastRouteWasDrawn = false;
   function showStartToast(){
     var toast = document.getElementById('start-toast');
     toast.classList.add('show');
+    document.getElementById('btn-toast-undo').style.display = lastRouteWasDrawn ? 'inline-flex' : 'none';
     clearTimeout(startToastTimer);
-    startToastTimer = setTimeout(function(){ toast.classList.remove('show'); }, 8000);
+    startToastTimer = setTimeout(function(){ toast.classList.remove('show'); }, lastRouteWasDrawn ? 15000 : 8000);
   }
   function hideStartToast(){
     document.getElementById('start-toast').classList.remove('show');
@@ -1643,6 +1654,7 @@
         pts.forEach(function(p, i){ points.push({ id:uid(), name:p.name, lat:p.lat, lon:p.lon, kind:p.kind, reached:false }); });
         if (points.length) points[points.length-1].kind = 'stop'; // letzter Punkt = Ziel, immer als Stopp behandelt
         renderAll();
+        lastRouteWasDrawn = false;
         showStartToast();
       }catch(err){ alert('Import fehlgeschlagen: ' + err.message); }
     };
@@ -1809,6 +1821,7 @@
             if (points.length) points[points.length-1].kind = 'stop';
             renderAll();
             closeSheets();
+            lastRouteWasDrawn = false;
             showStartToast();
           };
           resultEl.appendChild(btn);
@@ -2102,11 +2115,18 @@
     ];
     renderAll();
     closeSheets();
+    lastRouteWasDrawn = false;
     showStartToast();
   };
 
   document.getElementById('btn-toast-start').onclick = function(){ hideStartToast(); if (!tracking) startTracking(); };
   document.getElementById('btn-toast-dismiss').onclick = hideStartToast;
+  document.getElementById('btn-toast-undo').onclick = function(){
+    points = [];
+    lastRouteWasDrawn = false;
+    renderAll();
+    hideStartToast();
+  };
 
   /* ---------------- Onboarding (3 Schritte, nur beim allerersten Start) ---------------- */
   var appIconEl = document.querySelector('link[rel="apple-touch-icon"]');
