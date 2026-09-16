@@ -42,6 +42,15 @@
   .leaflet-control-zoom a{ background:var(--panel-solid) !important; color:var(--text) !important; border-color:var(--line) !important; }
   .leaflet-popup-content-wrapper{ background:var(--panel-solid); color:var(--text); }
   .leaflet-popup-tip{ background:var(--panel-solid); }
+  .leaflet-div-icon{ background:transparent; border:none; }
+  .poi-marker{
+    width:28px; height:28px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    box-shadow:0 2px 6px rgba(0,0,0,.55); border:2px solid rgba(255,255,255,.9);
+  }
+  .poi-marker svg{ width:16px; height:16px; display:block; }
+  .poi-marker.coffee{ background:#3f2a1d; color:#f3e5d8; }
+  .poi-marker.fuel{ background:#a8d8ef; color:#0d2b3d; }
+  .poi-marker.hairpin{ background:#f2883f; color:#3a1a00; }
   /* Zoom-/Attribution-Steuerung von Leaflet liegt standardmäßig über allem (z-index 1000) und
      überdeckte sonst Text in Status-Pille/Aktionsleiste – deshalb hier wegschieben statt überlagern. */
   .leaflet-top{ margin-top:calc(132px + env(safe-area-inset-top)); z-index:150 !important; }
@@ -555,6 +564,46 @@
   function iconHTML(name, px){
     return '<span style="display:inline-flex;width:' + px + 'px;height:' + px + 'px;vertical-align:middle;">' + ICONS[name] + '</span>';
   }
+  // Kartenmarker mit demselben Icon wie der jeweilige Umschalter-Button, auf gefülltem
+  // Farbhintergrund für Kontrast/Lesbarkeit auf der (invertierten) Karte.
+  function poiDivIcon(kind){
+    var cssClass = kind === 'hairpins' ? 'hairpin' : kind;
+    var iconName = kind === 'hairpins' ? 'hairpin' : kind;
+    return L.divIcon({
+      className: '',
+      html: '<div class="poi-marker ' + cssClass + '">' + ICONS[iconName] + '</div>',
+      iconSize: [28, 28], iconAnchor: [14, 14]
+    });
+  }
+
+  // Live-Standort: stilisierte Sport-Tourer-Silhouette (CBR1100XX-Proportionen: lange, niedrige
+  // Verkleidung, hohe Frontscheibe) im Comicstil - aus einfachen Grundformen zusammengesetzt, keine
+  // originalgetreue technische Zeichnung. Feste Blickrichtung, dreht sich nicht mit der Fahrtrichtung.
+  var MOTORCYCLE_SVG =
+    '<svg viewBox="0 0 200 110" width="42" height="24">' +
+      '<ellipse cx="100" cy="98" rx="90" ry="6" fill="#000" opacity="0.25"/>' +
+      '<rect x="20" y="72" width="35" height="10" rx="5" fill="#c9ccd1"/>' +
+      '<circle cx="45" cy="80" r="26" fill="#17181d" stroke="#e9e9ed" stroke-width="3"/>' +
+      '<circle cx="45" cy="80" r="10" fill="none" stroke="#9184d9" stroke-width="2"/>' +
+      '<circle cx="155" cy="80" r="26" fill="#17181d" stroke="#e9e9ed" stroke-width="3"/>' +
+      '<circle cx="155" cy="80" r="10" fill="none" stroke="#9184d9" stroke-width="2"/>' +
+      '<rect x="60" y="62" width="80" height="22" rx="4" fill="#17181d"/>' +
+      '<path d="M55,64 L70,40 L100,32 L135,34 L155,46 L150,64 Z" fill="#9184d9"/>' +
+      '<path d="M128,34 L150,20 L156,44 Z" fill="#cfe8f5" fill-opacity="0.8"/>' +
+      '<line x1="118" y1="34" x2="122" y2="21" stroke="#17181d" stroke-width="3" stroke-linecap="round"/>' +
+      '<circle cx="123" cy="19" r="3" fill="#17181d"/>' +
+      '<line x1="150" y1="60" x2="156" y2="52" stroke="#17181d" stroke-width="6" stroke-linecap="round"/>' +
+      '<circle cx="153" cy="49" r="4" fill="#fbe8a6"/>' +
+      '<rect x="47" y="58" width="8" height="5" rx="1" fill="#E5484D"/>' +
+    '</svg>';
+  function motorcycleDivIcon(){
+    return L.divIcon({
+      className: '',
+      html: MOTORCYCLE_SVG,
+      iconSize: [42, 24], iconAnchor: [21, 12]
+    });
+  }
+
   document.querySelectorAll('[data-icon]').forEach(function(el){
     var name = el.getAttribute('data-icon');
     if (ICONS[name]) el.innerHTML = ICONS[name];
@@ -701,18 +750,38 @@
       return raw ? JSON.parse(raw) : [];
     }catch(e){ return []; }
   }
+  function reverseGeocode(lat, lon){
+    return fetch('https://nominatim.openstreetmap.org/reverse?format=json&lat=' + lat + '&lon=' + lon + '&zoom=12')
+      .then(function(r){ return r.json(); })
+      .then(function(data){
+        var a = data && data.address;
+        if (!a) return null;
+        return a.city || a.town || a.village || a.municipality || a.county
+          || (data.display_name ? data.display_name.split(',')[0] : null);
+      }).catch(function(){ return null; });
+  }
+  // "Startpunkt"/"Aktueller Standort" und "Ziel" sind Rollen-Bezeichner, keine echten Ortsnamen -
+  // für die gespeicherte Route wird stattdessen per Rückwärts-Geokodierung der tatsächliche Ort ermittelt.
+  function resolveNameForSave(p){
+    if (p.name === 'Startpunkt' || p.name === 'Aktueller Standort' || p.name === 'Ziel'){
+      return reverseGeocode(p.lat, p.lon).then(function(n){ return n || p.name; });
+    }
+    return Promise.resolve(p.name);
+  }
   function saveRecentRoute(pts){
     if (pts.length < 2) return;
-    try{
-      var name = pts[0].name + ' → ' + pts[pts.length-1].name;
-      var list = loadRecentRoutes().filter(function(e){ return e.name !== name; }); // Duplikat nach vorn holen statt doppelt
-      list.unshift({
-        ts: Date.now(),
-        name: name,
-        points: pts.map(function(p){ return { name:p.name, lat:p.lat, lon:p.lon, kind:p.kind }; })
-      });
-      localStorage.setItem('kurvenkumpel_recent', JSON.stringify(list.slice(0, 5)));
-    }catch(e){ /* Speicherung nicht verfügbar - Funktion wird einfach übersprungen */ }
+    Promise.all([resolveNameForSave(pts[0]), resolveNameForSave(pts[pts.length-1])]).then(function(names){
+      try{
+        var name = names[0] + ' → ' + names[1];
+        var list = loadRecentRoutes().filter(function(e){ return e.name !== name; }); // Duplikat nach vorn holen statt doppelt
+        list.unshift({
+          ts: Date.now(),
+          name: name,
+          points: pts.map(function(p){ return { name:p.name, lat:p.lat, lon:p.lon, kind:p.kind }; })
+        });
+        localStorage.setItem('kurvenkumpel_recent', JSON.stringify(list.slice(0, 5)));
+      }catch(e){ /* Speicherung nicht verfügbar - Funktion wird einfach übersprungen */ }
+    });
   }
   function renderRecentRoutes(){
     var wrap = document.getElementById('nr-recent');
@@ -742,7 +811,7 @@
   // damit die bereits getestete Tracking-Logik unangetastet bleibt.
   function placeMeMarker(pos){
     if (meMarker) map.removeLayer(meMarker);
-    meMarker = L.circleMarker([pos.lat, pos.lon], { radius:7, color:'#e9e9ed', fillColor:'#9184d9', fillOpacity:1, weight:2 }).addTo(map);
+    meMarker = L.marker([pos.lat, pos.lon], { icon: motorcycleDivIcon() }).addTo(map);
     map.setView([pos.lat, pos.lon], Math.max(map.getZoom(), 14));
   }
 
@@ -1105,6 +1174,25 @@
     lastRouteCoords = null;
     lastHairpinPoints = [];
     resetPoiToggles();
+    updateRouteETA();
+  }
+
+  // Distanz/Dauer bis zum Ziel: direkt nach dem Erstellen der Route die Gesamtstrecke, während des
+  // Trackings die Reststrecke ab der aktuellen Position (per Fortschrittsanteil entlang der Route).
+  function updateRouteETA(){
+    var el = document.getElementById('route-eta');
+    if (!lastRouteCoords || lastRouteCoords.length < 2 || !points.length){ el.style.display = 'none'; return; }
+    var routeFrac = computeRouteFractions();
+    var remaining = routeFrac.total;
+    var speed = null;
+    if (tracking && lastKnownPos){
+      var frac = fractionOf(routeFrac, [lastKnownPos.lat, lastKnownPos.lon]);
+      remaining = routeFrac.total * Math.max(0, 1 - frac);
+      speed = lastKnownSpeed;
+    }
+    var destName = points[points.length-1] ? points[points.length-1].name : 'Ziel';
+    el.innerHTML = (tracking ? 'Noch bis ' : 'Insgesamt bis ') + '<b>' + destName + '</b>: ' + formatDist(remaining) + ' · ' + formatDuration(remaining, speed);
+    el.style.display = 'block';
   }
 
   function renderRouteCharacter(coords){
@@ -1112,6 +1200,7 @@
     var stats = computeCurvatureStats(coords);
     lastHairpinPoints = stats.hairpinPoints;
     resetPoiToggles();
+    updateRouteETA();
     var wrap = document.getElementById('route-summary');
     var row = document.getElementById('rs-character');
     row.innerHTML = '';
@@ -1154,8 +1243,7 @@
   function showHairpinMarkers(){
     clearPoiMarkers('hairpins');
     lastHairpinPoints.forEach(function(c){
-      var m = L.circleMarker(c, { radius:7, color:'#e9e9ed', fillColor:'#E5484D', fillOpacity:.9, weight:2 })
-        .bindPopup('Spitzkehre').addTo(map);
+      var m = L.marker(c, { icon: poiDivIcon('hairpins') }).bindPopup('Spitzkehre').addTo(map);
       poiState.hairpins.markers.push(m);
     });
   }
@@ -1169,7 +1257,6 @@
       return;
     }
     var tag = kind === 'coffee' ? 'amenity=cafe' : 'amenity=fuel';
-    var color = kind === 'coffee' ? '#c69a6d' : '#f2c14e';
     var label = kind === 'coffee' ? 'Café' : 'Tankstelle';
     var n = lastRouteCoords.length;
     var step = Math.max(1, Math.floor(n / 20));
@@ -1188,8 +1275,7 @@
           if (seen[key]) return;
           seen[key] = true;
           var name = (el.tags && el.tags.name) || label;
-          var m = L.circleMarker([el.lat, el.lon], { radius:6, color:'#e9e9ed', fillColor:color, fillOpacity:.9, weight:1.5 })
-            .bindPopup(name).addTo(map);
+          var m = L.marker([el.lat, el.lon], { icon: poiDivIcon(kind) }).bindPopup(name).addTo(map);
           poiState[kind].markers.push(m);
         });
         if (!poiState[kind].markers.length){ alert('Keine ' + (kind==='coffee'?'Cafés':'Tankstellen') + ' innerhalb 5 km der Route gefunden.'); }
@@ -1484,6 +1570,8 @@
     tracking = false; renderStatus();
     if (watchId!==null){ navigator.geolocation.clearWatch(watchId); watchId=null; }
     if (wakeLock){ wakeLock.release().catch(function(){}); wakeLock=null; }
+    renderRouteOverview();
+    updateRouteETA();
   }
   function onPositionError(err){ document.getElementById('pill-kind').textContent = 'GPS-Fehler: ' + err.message; }
 
@@ -1506,7 +1594,7 @@
     lastKnownPos = { lat:lat, lon:lon };
     lastKnownSpeed = pos.coords.speed;
     if (meMarker) map.removeLayer(meMarker);
-    meMarker = L.circleMarker([lat,lon], { radius:7, color:'#e9e9ed', fillColor:'#9184d9', fillOpacity:1, weight:2 }).addTo(map);
+    meMarker = L.marker([lat,lon], { icon: motorcycleDivIcon() }).addTo(map);
     map.panTo([lat,lon]);
     renderRouteOverview();
     updateRouteETA();
