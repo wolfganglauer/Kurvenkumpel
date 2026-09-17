@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    @keyframes ruddyPulse { 0%{ transform: scale(1); opacity:0.55; } 70%{ transform: scale(2.6); opacity:0; } 100%{ transform: scale(2.6); opacity:0; } }
+    body { margin:0; background:#0e0f17; }
+    .leaflet-tile-pane{ filter:invert(1) hue-rotate(220deg) brightness(.95) contrast(.9) saturate(.55); }
+    .leaflet-overlay-pane, .leaflet-marker-pane, .leaflet-popup-pane, .leaflet-tooltip-pane{ filter:invert(1) hue-rotate(220deg); }
+    .leaflet-control-attribution{ background:#1c1e2b !important; color:#75798c !important; font-size:9px !important; }
+    .leaflet-control-attribution a{ color:#9397ab !important; }
+    .leaflet-control-zoom a{ background:#1c1e2b !important; color:#e9e9ed !important; border-color:#3f424d !important; }
+    .leaflet-popup-content-wrapper, .leaflet-popup-tip{ background:#1c1e2b !important; color:#e9e9ed !important; }
+    .leaflet-top{ margin-top:118px !important; z-index:100 !important; }
+    .leaflet-bottom{ margin-bottom:100px !important; z-index:100 !important; }
+    .ruddy-map { position:absolute; inset:0; z-index:1; background:#161826; }
+  </style>
+</helmet>
+<x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" dark="{{ true }}" hint-size="402,874">
+  <div style="position:relative; width:100%; height:100%; background:#161826; overflow:hidden; font-family:Inter,system-ui,sans-serif; color:#e9e9ed;">
+
+    <div class="ruddy-map" ref="{{ mapRef }}"></div>
+
+    <sc-if value="{{ isOnboarding }}" hint-placeholder-val="{{ true }}">
+      <div style="position:absolute; inset:0; background:linear-gradient(160deg,#1b1e2e 0%,#161826 55%,#12131c 100%); z-index:200;"></div>
+      <div style="position:relative; height:100%; display:flex; flex-direction:column; padding:76px 24px 40px; box-sizing:border-box; z-index:201;">
+
+        <sc-if value="{{ obStep0 }}" hint-placeholder-val="{{ true }}">
+          <div style="flex:1; display:flex; flex-direction:column; justify-content:center; gap:18px;">
+            <div style="width:56px; height:56px; border-radius:14px; overflow:hidden; box-shadow:0 0 0 1px #595d6c, 0 6px 18px rgba(0,0,0,0.55);">
+              <img src="assets/app-icon.png" alt="Ruddy" style="width:100%; height:100%; object-fit:cover;"/>
+            </div>
+            <h1 style="font-size:34px; font-weight:500; line-height:1.1; margin:0; letter-spacing:-0.02em; color:#f3f5fe;">Ruddy</h1>
+            <p style="font-size:16px; line-height:1.5; color:#b2b6ca; margin:0; max-width:280px;">Route tools for riders who just want to ride. Real roads, real GPS, no subscription.</p>
+          </div>
+          <button onClick="{{ goStep1 }}" style="height:58px; border-radius:8px; border:1.5px solid #9184d9; background:transparent; color:#d2cefd; font-size:17px; font-weight:500; font-family:Inter,system-ui,sans-serif; cursor:pointer;">Get started</button>
+        </sc-if>
+
+        <sc-if value="{{ obStep1 }}" hint-placeholder-val="{{ false }}">
+          <div style="flex:1; display:flex; flex-direction:column; gap:22px;">
+            <div>
+              <h2 style="font-size:26px; font-weight:500; margin:0 0 8px; color:#f3f5fe;">Set your home base</h2>
+              <p style="font-size:15px; color:#9397ab; margin:0;">We'll use your real location. Change it anytime in Settings.</p>
+            </div>
+            <button onClick="{{ captureHomeOnboarding }}" style="height:52px; border-radius:8px; border:1px solid {{ homeSetBorder }}; background:#1c1e2b; color:{{ homeSetColor }}; font-size:15px; font-family:Inter,system-ui,sans-serif; cursor:pointer;">{{ homeSetLabel }}</button>
+          </div>
+          <div style="display:flex; gap:10px;">
+            <button onClick="{{ goStep0 }}" style="flex:1; height:56px; border-radius:8px; border:1px solid #3f424d; background:transparent; color:#b2b6ca; font-size:16px; font-family:Inter,system-ui,sans-serif; cursor:pointer;">Back</button>
+            <button onClick="{{ goStep2 }}" style="flex:2; height:56px; border-radius:8px; border:1.5px solid #9184d9; background:transparent; color:#d2cefd; font-size:17px; font-weight:500; font-family:Inter,system-ui,sans-serif; cursor:pointer;">Continue</button>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ obStep2 }}" hint-placeholder-val="{{ false }}">
+          <div style="flex:1; display:flex; flex-direction:column; gap:22px;">
+            <div>
+              <h2 style="font-size:26px; font-weight:500; margin:0 0 8px; color:#f3f5fe;">Two permissions</h2>
+              <p style="font-size:15px; color:#9397ab; margin:0;">That's it. No account, no email.</p>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:12px;">
+              <div style="display:flex; align-items:center; gap:14px; padding:16px; border-radius:8px; background:#1c1e2b; border:1px solid #3f424d;">
+                <svg width="22" height="22" viewBox="0 0 256 256" style="flex-shrink:0;"><path d="M128 16a88.1 88.1 0 0 0-88 88c0 75.3 80 132.17 83.41 134.55a8 8 0 0 0 9.18 0C136 236.17 216 179.3 216 104a88.1 88.1 0 0 0-88-88Zm0 120a32 32 0 1 1 32-32a32 32 0 0 1-32 32Z" fill="{{ locIconColor }}"/></svg>
+                <div style="flex:1;"><div style="font-size:15px; font-weight:500; color:#e9e9ed;">Location</div><div style="font-size:13px; color:#75798c;">Centers the map and tracks you while riding</div></div>
+                <button onClick="{{ grantLoc }}" style="height:36px; padding:0 14px; border-radius:8px; border:1px solid {{ locBtnBorder }}; background:transparent; color:{{ locBtnColor }}; font-size:14px; font-family:Inter,system-ui,sans-serif; cursor:pointer;">{{ locBtnLabel }}</button>
+              </div>
+              <div style="display:flex; align-items:center; gap:14px; padding:16px; border-radius:8px; background:#1c1e2b; border:1px solid #3f424d;">
+                <svg width="22" height="22" viewBox="0 0 256 256" style="flex-shrink:0;"><path d="M221.8 175.94C216.25 166.38 208 139.33 208 104a80 80 0 0 0-160 0c0 35.34-8.26 62.38-13.81 71.94A16 16 0 0 0 48 200h40.81a40 40 0 0 0 78.38 0H208a16 16 0 0 0 13.8-24.06ZM128 216a24 24 0 0 1-22.62-16h45.24A24 24 0 0 1 128 216Z" fill="{{ notifIconColor }}"/></svg>
+                <div style="flex:1;"><div style="font-size:15px; font-weight:500; color:#e9e9ed;">Notifications</div><div style="font-size:13px; color:#75798c;">Arrival alerts and turn voice cues</div></div>
+                <button onClick="{{ grantNotif }}" style="height:36px; padding:0 14px; border-radius:8px; border:1px solid {{ notifBtnBorder }}; background:transparent; color:{{ notifBtnColor }}; font-size:14px; font-family:Inter,system-ui,sans-serif; cursor:pointer;">{{ notifBtnLabel }}</button>
+              </div>
+            </div>
+          </div>
+          <button onClick="{{ finishOnboarding }}" style="height:58px; border-radius:8px; border:1.5px solid #9184d9; background:transparent; color:#d2cefd; font-size:17px; font-weight:500; font-family:Inter,system-ui,sans-serif; cursor:pointer;">Take me to the map</button>
+        </sc-if>
+
+        <div style="display:flex; gap:6px; justify-content:center; margin-top:18px;">
+          <div style="width:{{ dot0Width }}px; height:6px; border-radius:3px; background:{{ dot0Color }};"></div>
+          <div style="width:{{ dot1Width }}px; height:6px; border-radius:3px; background:{{ dot1Color }};"></div>
+          <div style="width:{{ dot2Width }}px; height:6px; border-radius:3px; background:{{ dot2Color }};"></div>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isHome }}" hint-placeholder-val="{{ false }}">
+      <div style="position:absolute; top:64px; left:16px; right:16px; display:flex; justify-content:space-between; align-items:center; z-index:200;">
+        <div style="height:36px; padding:0 12px; border-radius:999px; background:rgba(28,30,43,0.9); border:1px solid #3f424d; display:flex; align-items:center; font-size:13px; color:#b2b6ca;">{{ pillText }}</div>
+        <button onClick="{{ goSettings }}" style="width:36px; height:36px; border-radius:999px; border:1px solid #595d6c; background:rgba(28,30,43,0.9); display:flex; align-items:center; justify-content:center; cursor:pointer;">
+          <svg width="17" height="17" viewBox="0 0 256 256"><path d="M128 80a48 48 0 1 0 48 48 48.05 48.05 0 0 0-48-48Zm0 80a32 32 0 1 1 32-32 32 32 0 0 1-32 32Zm88-52.2v9.6l19.5 15.16a8 8 0 0 1 1.9 10.16l-9.5 16.5a8 8 0 0 1-9.4 3.7l-22.6-7.6a90 90 0 0 1-8.3 4.8l-3.4 23.5a8 8 0 0 1-7.9 6.8h-19a8 8 0 0 1-7.9-6.8l-3.4-23.5a90 90 0 0 1-8.3-4.8l-22.6 7.6a8 8 0 0 1-9.4-3.7l-9.5-16.5a8 8 0 0 1 1.9-10.16L57.5 137.6v-9.6L38 112.84a8 8 0 0 1-1.9-10.16l9.5-16.5a8 8 0 0 1 9.4-3.7l22.6 7.6a90 90 0 0 1 8.3-4.8l3.4-23.5A8 8 0 0 1 97.2 54h19a8 8 0 0 1 7.9 6.8l3.4 23.5a90 90 0 0 1 8.3 4.8l22.6-7.6a8 8 0 0 1 9.4 3.7l9.5 16.5a8 8 0 0 1-1.9 10.16Z" fill="#b2b6ca"/></svg>
+        </button>
+      </div>
+
+      <sc-if value="{{ hasRoute }}" hint-placeholder-val="{{ false }}">
+        <div style="position:absolute; bottom:34px; left:16px; right:16px; background:rgba(28,30,43,0.94); border:1px solid #3f424d; border-radius:8px; padding:12px 16px; display:flex; align-items:center; justify-content:space-between; margin-bottom:70px; z-index:200;">
+          <div><div style="font-size:11px; color:#75798c; text-transform:uppercase; letter-spacing:0.06em;">{{ nextKindLabel }}</div><div style="font-size:15px; font-weight:500; color:#f3f5fe;">{{ nextName }}</div></div>
+          <div style="font-size:20px; font-weight:500; color:#d2cefd;">{{ nextDistLabel }}</div>
+        </div>
+      </sc-if>
+
+      <div style="position:absolute; bottom:34px; left:16px; right:16px; display:flex; flex-direction:column; gap:10px; z-index:200;">
+        <button onClick="{{ goRoute }}" style="height:44px; border-radius:8px; border:1px solid #3f424d; background:rgba(28,30,43,0.9); color:#b2b6ca; font-size:15px; font-family:Inter,system-ui,sans-serif; cursor:pointer;">Plan a route</button>
+        <button onClick="{{ toggleTracking }}" disabled="{{ startDisabled }}" style="height:60px; border-radius:8px; border:1.5px solid {{ startBorder }}; background:rgba(28,30,43,0.95); color:{{ startColor }}; font-size:18px; font-weight:500; font-family:Inter,system-ui,sans-serif; cursor:pointer;">{{ startLabel }}</button>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isRoute }}" hint-placeholder-val="{{ false }}">
+      <sc-if value="{{ drawModeOn }}" hint-placeholder-val="{{ false }}">
+        <div style="position:absolute; inset:0; z-index:160; touch-action:none;" onPointerDown="{{ onDrawStart }}" onPointerMove="{{ onDrawMove }}" onPointerUp="{{ onDrawEnd }}" onPointerCancel="{{ onDrawEnd }}"></div>
+        <div style="position:absolute; top:66px; left:16px; right:16px; text-align:center; font-size:13px; color:#e9e9ed; background:rgba(28,30,43,0.85); border-radius:8px; padding:8px; z-index:200;">Drag across the map to sketch a route \u2014 it snaps to real roads</div>
+      </sc-if>
+
+      <div style="position:absolute; top:64px; left:16px; right:16px; display:flex; gap:8px; justify-content:center; z-index:200;">
+        <button onClick="{{ goHome }}" style="width:36px; height:36px; border-radius:999px; border:1px solid #595d6c; background:rgba(28,30,43,0.9); display:flex; align-items:center; justify-content:center; cursor:pointer; position:absolute; left:0;">
+          <svg width="14" height="14" viewBox="0 0 256 256"><path d="M205.66 194.34a8 8 0 0 1-11.32 11.32L128 139.31l-66.34 66.35a8 8 0 0 1-11.32-11.32L116.69 128 50.34 61.66a8 8 0 0 1 11.32-11.32L128 116.69l66.34-66.35a8 8 0 0 1 11.32 11.32L139.31 128Z" fill="#b2b6ca"/></svg>
+        </button>
+        <div style="display:flex; background:#1c1e2b; border-radius:999px; border:1px solid #3f424d; padding:3px;">
+          <button onClick="{{ setModeSearch }}" style="height:32px; padding:0 16px; border-radius:999px; border:none; font-size:13px; font-family:Inter,system-ui,sans-serif; cursor:pointer; background:{{ searchTabBg }}; color:{{ searchTabColor }};">Search</button>
+          <button onClick="{{ setModeDraw }}" style="height:32px; padding:0 16px; border-radius:999px; border:none; font-size:13px; font-family:Inter,system-ui,sans-serif; cursor:pointer; background:{{ drawTabBg }}; color:{{ drawTabColor }};">Draw</button>
+        </div>
+        <button onClick="{{ toggleFileMenu }}" style="width:36px; height:36px; border-radius:999px; border:1px solid #595d6c; background:rgba(28,30,43,0.9); display:flex; align-items:center; justify-content:center; cursor:pointer; position:absolute; right:0;">
+          <svg width="16" height="16" viewBox="0 0 256 256"><circle cx="128" cy="64" r="16" fill="#b2b6ca"/><circle cx="128" cy="128" r="16" fill="#b2b6ca"/><circle cx="128" cy="192" r="16" fill="#b2b6ca"/></svg>
+        </button>
+      </div>
+
+      <sc-if value="{{ fileMenuOpen }}" hint-placeholder-val="{{ false }}">
+        <div style="position:absolute; top:112px; right:16px; background:#1c1e2b; border:1px solid #3f424d; border-radius:8px; padding:6px; display:flex; flex-direction:column; gap:2px; z-index:201;">
+          <button onClick="{{ openGpxImport }}" style="text-align:left; padding:8px 12px; background:transparent; border:none; color:#e9e9ed; font-size:13px; border-radius:6px; cursor:pointer; font-family:Inter,system-ui,sans-serif;">Import GPX</button>
+          <button onClick="{{ exportGpx }}" style="text-align:left; padding:8px 12px; background:transparent; border:none; color:#e9e9ed; font-size:13px; border-radius:6px; cursor:pointer; font-family:Inter,system-ui,sans-serif;">Export GPX</button>
+        </div>
+      </sc-if>
+      <input type="file" accept=".gpx" ref="{{ gpxInputRef }}" onChange="{{ onGpxFileChosen }}" style="display:none;"/>
+
+      <sc-if value="{{ searchModeOn }}" hint-placeholder-val="{{ true }}">
+        <div style="position:absolute; top:116px; left:16px; right:16px; bottom:34px; display:flex; flex-direction:column; gap:8px; overflow:hidden; z-index:200;">
+          <input value="{{ stopQuery }}" onChange="{{ onStopQueryChange }}" placeholder="Search a place to add as a stop" style="height:44px; border-radius:8px; border:1px solid #3f424d; background:#1c1e2b; color:#e9e9ed; font-size:15px; padding:0 14px; box-sizing:border-box; font-family:Inter,system-ui,sans-serif; flex-shrink:0;"/>
+
+          <sc-if value="{{ hasStopResults }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex; flex-direction:column; gap:4px; background:#1c1e2b; border:1px solid #3f424d; border-radius:8px; padding:6px; max-height:160px; overflow:auto; flex-shrink:0;">
+              <sc-for list="{{ stopResults }}" as="res" hint-placeholder-count="0">
+                <button onClick="{{ res.select }}" style="text-align:left; padding:8px 10px; background:transparent; border:none; color:#e9e9ed; font-size:13px; border-radius:6px; cursor:pointer; font-family:Inter,system-ui,sans-serif;">{{ res.label }}</button>
+              </sc-for>
+            </div>
+          </sc-if>
+
+          <div style="flex:1; overflow:auto; display:flex; flex-direction:column; gap:8px; min-height:0;">
+            <sc-if value="{{ !hasPoints }}" hint-placeholder-val="{{ true }}">
+              <sc-if value="{{ hasRecent }}" hint-placeholder-val="{{ false }}">
+                <div style="font-size:11px; color:#75798c; text-transform:uppercase; letter-spacing:0.06em; margin-top:4px;">Recent</div>
+                <sc-for list="{{ recent }}" as="rec" hint-placeholder-count="0">
+                  <button onClick="{{ rec.select }}" style="display:flex; align-items:center; justify-content:space-between; text-align:left; padding:14px 16px; border-radius:8px; background:#1c1e2b; border:1px solid #3f424d; cursor:pointer; font-family:Inter,system-ui,sans-serif;">
+                    <div style="font-size:14px; color:#e9e9ed;">{{ rec.name }}</div>
+                    <svg width="8" height="14" viewBox="0 0 8 14"><path d="M1 1l6 6-6 6" stroke="#75798c" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  </button>
+                </sc-for>
+              </sc-if>
+            </sc-if>
+
+            <sc-for list="{{ pointRows }}" as="pt" hint-placeholder-count="0">
+              <div style="display:flex; align-items:center; gap:8px; padding:10px 12px; border-radius:8px; background:#1c1e2b; border:1px solid #3f424d;">
+                <div style="width:22px; height:22px; border-radius:999px; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:600; background:{{ pt.iconBg }}; color:{{ pt.iconColor }}; border:1.5px solid {{ pt.iconBorder }};">{{ pt.iconGlyph }}</div>
+                <div style="flex:1; min-width:0; font-size:14px; color:#e9e9ed; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ pt.name }}</div>
+                <button onClick="{{ pt.toggleKind }}" style="font-size:11px; color:#9397ab; border:1px solid #3f424d; border-radius:999px; padding:4px 8px; background:transparent; cursor:pointer; flex-shrink:0;">{{ pt.kindLabel }}</button>
+                <button onClick="{{ pt.moveUp }}" style="width:26px; height:26px; border:none; background:transparent; color:#75798c; cursor:pointer; flex-shrink:0;">\u2191</button>
+                <button onClick="{{ pt.moveDown }}" style="width:26px; height:26px; border:none; background:transparent; color:#75798c; cursor:pointer; flex-shrink:0;">\u2193</button>
+                <button onClick="{{ pt.remove }}" style="width:26px; height:26px; border:none; background:transparent; color:#75798c; cursor:pointer; flex-shrink:0;">\u2715</button>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ hasRoute }}" hint-placeholder-val="{{ false }}">
+        <div style="position:absolute; bottom:0; left:0; right:0; background:#1c1e2b; border-top:1px solid #3f424d; border-radius:14px 14px 0 0; padding:16px; box-sizing:border-box; display:flex; flex-direction:column; gap:12px; z-index:200;">
+          <div style="display:flex; justify-content:space-between;">
+            <div><div style="font-size:22px; font-weight:500; color:#f3f5fe;">{{ routeDistLabel }}</div><div style="font-size:11px; color:#75798c; text-transform:uppercase; letter-spacing:0.06em;">Distance</div></div>
+            <div><div style="font-size:22px; font-weight:500; color:#f3f5fe;">{{ routeDurLabel }}</div><div style="font-size:11px; color:#75798c; text-transform:uppercase; letter-spacing:0.06em;">Est. time</div></div>
+            <button onClick="{{ reverseRoute }}" style="align-self:center; width:44px; height:44px; border-radius:999px; border:1px solid #595d6c; background:transparent; display:flex; align-items:center; justify-content:center; cursor:pointer;">
+              <svg width="18" height="18" viewBox="0 0 256 256"><path d="M245.66 90.34l-48-48a8 8 0 0 0-11.32 11.32L220.69 88H72a48.05 48.05 0 0 0-48 48v40a8 8 0 0 0 16 0v-40a32 32 0 0 1 32-32h148.69l-34.35 34.34a8 8 0 0 0 11.32 11.32l48-48a8 8 0 0 0 0-11.32Z" fill="#b2b6ca"/></svg>
+            </button>
+          </div>
+          <button onClick="{{ startThisRoute }}" style="height:52px; border-radius:8px; border:1.5px solid #9184d9; background:transparent; color:#d2cefd; font-size:16px; font-weight:500; font-family:Inter,system-ui,sans-serif; cursor:pointer;">Start ride</button>
+        </div>
+      </sc-if>
+    </sc-if>
+
+    <sc-if value="{{ isSettings }}" hint-placeholder-val="{{ false }}">
+      <div style="position:absolute; inset:0; background:#161826; z-index:200;"></div>
+      <div style="position:relative; height:100%; overflow:auto; padding:68px 16px 40px; box-sizing:border-box; display:flex; flex-direction:column; gap:24px; z-index:201;">
+        <div style="display:flex; align-items:center; gap:12px;">
+          <button onClick="{{ goHome }}" style="width:36px; height:36px; border-radius:999px; border:1px solid #3f424d; background:transparent; display:flex; align-items:center; justify-content:center; cursor:pointer;">
+            <svg width="14" height="14" viewBox="0 0 256 256"><path d="M224 128a8 8 0 0 1-8 8H59.31l58.35 58.34a8 8 0 0 1-11.32 11.32l-72-72a8 8 0 0 1 0-11.32l72-72a8 8 0 0 1 11.32 11.32L59.31 120H216a8 8 0 0 1 8 8Z" fill="#e9e9ed"/></svg>
+          </button>
+          <h1 style="font-size:26px; font-weight:500; margin:0; color:#f3f5fe;">Settings</h1>
+        </div>
+
+        <div>
+          <div style="font-size:12px; letter-spacing:0.08em; text-transform:uppercase; color:#75798c; margin-bottom:8px; padding-left:4px;">Ride alerts</div>
+          <div style="background:#1c1e2b; border-radius:8px; border:1px solid #3f424d; overflow:hidden;">
+            <div style="padding:14px 16px; display:flex; flex-direction:column; gap:10px; border-bottom:1px solid #3f424d;">
+              <div style="display:flex; justify-content:space-between; font-size:15px; color:#e9e9ed;"><span>Arrival radius</span><span style="color:#9397ab;">{{ radiusLabel }}</span></div>
+              <input type="range" min="30" max="300" step="10" value="{{ radiusM }}" onChange="{{ onRadiusChange }}" style="width:100%; accent-color:#9184d9;"/>
+            </div>
+            <div style="padding:14px 16px; display:flex; align-items:center; justify-content:space-between;">
+              <div><div style="font-size:15px; color:#e9e9ed;">Voice announcements</div><div style="font-size:12px; color:#75798c; margin-top:2px;">Speaks turns and arrival</div></div>
+              <button onClick="{{ toggleVoice }}" style="width:48px; height:28px; border-radius:999px; border:1px solid {{ voiceTrackBorder }}; background:{{ voiceTrackBg }}; position:relative; cursor:pointer;"><span style="position:absolute; top:2px; left:{{ voiceKnobLeft }}px; width:22px; height:22px; border-radius:999px; background:#f3f5fe; transition:left .15s;"></span></button>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div style="font-size:12px; letter-spacing:0.08em; text-transform:uppercase; color:#75798c; margin-bottom:8px; padding-left:4px;">Home & units</div>
+          <div style="background:#1c1e2b; border-radius:8px; border:1px solid #3f424d; overflow:hidden;">
+            <div style="padding:14px 16px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid #3f424d; gap:10px;">
+              <div style="min-width:0;"><div style="font-size:15px; color:#e9e9ed;">Home location</div><div style="font-size:12px; color:#75798c; margin-top:2px;">{{ homeStatusLabel }}</div></div>
+              <button onClick="{{ captureHomeSettings }}" style="height:34px; padding:0 12px; border-radius:8px; border:1px solid #3f424d; background:transparent; color:#b2b6ca; font-size:13px; font-family:Inter,system-ui,sans-serif; cursor:pointer; flex-shrink:0;">{{ homeActionLabel }}</button>
+            </div>
+            <div style="padding:14px 16px; display:flex; align-items:center; justify-content:space-between;">
+              <div style="font-size:15px; color:#e9e9ed;">Units</div>
+              <div style="display:flex; background:#161826; border-radius:999px; border:1px solid #3f424d; padding:3px;">
+                <button onClick="{{ setUnitsMi }}" style="height:30px; padding:0 14px; border-radius:999px; border:none; font-size:13px; font-family:Inter,system-ui,sans-serif; cursor:pointer; background:{{ miTabBg }}; color:{{ miTabColor }};">mi</button>
+                <button onClick="{{ setUnitsKm }}" style="height:30px; padding:0 14px; border-radius:999px; border:none; font-size:13px; font-family:Inter,system-ui,sans-serif; cursor:pointer; background:{{ kmTabBg }}; color:{{ kmTabColor }};">km</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="text-align:center; padding:8px 12px; color:#75798c; font-size:12px; line-height:1.6;">
+          Ruddy is a one-time purchase. No subscription, no account, no ads \u2014 ever.
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ arrivalInfo }}" hint-placeholder-val="{{ false }}">
+      <div style="position:absolute; inset:0; background:rgba(14,15,23,0.97); z-index:300; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:32px; box-sizing:border-box;">
+        <div style="font-size:30px; font-weight:500; color:#8fd6a8; margin-bottom:8px;">{{ arrivalHeadline }}</div>
+        <div style="font-size:14px; color:#75798c; margin-bottom:26px;">{{ arrivalReachedName }}</div>
+        <div style="font-size:20px; font-weight:500; color:#f3f5fe; margin-bottom:28px;">{{ arrivalNextText }}</div>
+        <sc-if value="{{ arrivalHasNext }}" hint-placeholder-val="{{ false }}">
+          <button onClick="{{ continueWithNav }}" style="width:100%; max-width:320px; height:52px; margin-bottom:10px; border-radius:8px; border:1.5px solid #9184d9; background:transparent; color:#d2cefd; font-size:15px; font-family:Inter,system-ui,sans-serif; cursor:pointer;">Continue & open navigation</button>
+        </sc-if>
+        <button onClick="{{ continueOnly }}" style="width:100%; max-width:320px; height:52px; border-radius:8px; border:1px solid #3f424d; background:transparent; color:#b2b6ca; font-size:15px; font-family:Inter,system-ui,sans-serif; cursor:pointer;">Just continue</button>
+      </div>
+    </sc-if>
+
+  </div>
+</x-import>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+function uid(){ return 'p_' + Math.random().toString(36).slice(2,9); }
+function distMeters(lat1,lon1,lat2,lon2){
+  var R=6371000, toRad=function(d){return d*Math.PI/180;};
+  var dLat=toRad(lat2-lat1), dLon=toRad(lon2-lon1);
+  var a=Math.sin(dLat/2)*Math.sin(dLat/2)+Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)*Math.sin(dLon/2);
+  return R*2*Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+class Component extends DCLogic {
+  state = {
+    screen: 'onboarding', obStep: 0,
+    homePos: null, locGranted: false, notifGranted: false,
+    points: [], routeMode: 'search', fileMenuOpen: false,
+    routeDistanceM: null, routeDurationS: null,
+    stopQuery: '', stopResults: [],
+    tracking: false, distToNext: null, arrivalInfo: null,
+    radiusM: 100, voice: true, units: 'mi',
+  };
+
+  componentDidMount() {
+    try { var raw = localStorage.getItem('ruddy_home'); if (raw) this.state.homePos = JSON.parse(raw); } catch (e) {}
+    try { var s = localStorage.getItem('ruddy_settings'); if (s) Object.assign(this.state, JSON.parse(s)); } catch (e) {}
+  }
+  persistSettings() {
+    try { localStorage.setItem('ruddy_settings', JSON.stringify({ radiusM: this.state.radiusM, voice: this.state.voice, units: this.state.units })); } catch (e) {}
+  }
+  loadRecent() { try { var r = localStorage.getItem('ruddy_recent'); return r ? JSON.parse(r) : []; } catch (e) { return []; } }
+  saveRecent(pts) {
+    if (pts.length < 2) return;
+    var name = pts[0].name + ' \u2192 ' + pts[pts.length-1].name;
+    var list = this.loadRecent().filter(function(e){ return e.name !== name; });
+    list.unshift({ name: name, points: pts.map(function(p){ return { name:p.name, lat:p.lat, lon:p.lon, kind:p.kind }; }) });
+    try { localStorage.setItem('ruddy_recent', JSON.stringify(list.slice(0,5))); } catch (e) {}
+  }
+
+  mapRef = (el) => {
+    this.mapEl = el;
+    if (el && !this.map) {
+      var map = L.map(el, { zoomControl: true, attributionControl: true }).setView([47.5, 11.0], 7);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap' }).addTo(map);
+      this.routeLine = L.polyline([], { color: '#9184d9', weight: 4, opacity: 0.9 }).addTo(map);
+      this.map = map;
+      this.markers = [];
+    }
+  };
+
+  findInsertionIndex(pt) {
+    var pts = this.state.points;
+    if (!pts.length) return 0;
+    var bestIdx = pts.length, bestCost = distMeters(pts[pts.length-1].lat, pts[pts.length-1].lon, pt.lat, pt.lon);
+    for (var i = 0; i <= pts.length; i++) {
+      var cost;
+      if (i === 0) cost = distMeters(pt.lat, pt.lon, pts[0].lat, pts[0].lon);
+      else if (i === pts.length) cost = distMeters(pts[i-1].lat, pts[i-1].lon, pt.lat, pt.lon);
+      else { var prev = pts[i-1], next = pts[i]; cost = distMeters(prev.lat,prev.lon,pt.lat,pt.lon) + distMeters(pt.lat,pt.lon,next.lat,next.lon) - distMeters(prev.lat,prev.lon,next.lat,next.lon); }
+      if (cost <= bestCost) { bestCost = cost; bestIdx = i; }
+    }
+    return bestIdx;
+  }
+  addPoint(pt) {
+    var pts = this.state.points.slice();
+    pts.splice(this.findInsertionIndex(pt), 0, pt);
+    this.setState({ points: pts }, () => { this.renderMarkers(); this.scheduleRoute(); });
+  }
+  removePoint(id) { var pts = this.state.points.filter(p => p.id !== id); this.setState({ points: pts }, () => { this.renderMarkers(); this.scheduleRoute(); }); }
+  toggleKind(id) { var pts = this.state.points.map(p => p.id === id ? Object.assign({}, p, { kind: p.kind === 'stop' ? 'waypoint' : 'stop' }) : p); this.setState({ points: pts }, () => this.renderMarkers()); }
+  movePoint(id, dir) {
+    var pts = this.state.points.slice(); var i = pts.findIndex(p => p.id === id); var j = i + dir;
+    if (i < 0 || j < 0 || j >= pts.length) return;
+    var t = pts[i]; pts[i] = pts[j]; pts[j] = t;
+    this.setState({ points: pts }, () => { this.renderMarkers(); this.scheduleRoute(); });
+  }
+  reverseRoute = () => { var pts = this.state.points.slice().reverse(); this.setState({ points: pts }, () => { this.renderMarkers(); this.scheduleRoute(); }); };
+
+  renderMarkers() {
+    if (!this.map) return;
+    (this.markers || []).forEach(m => this.map.removeLayer(m));
+    this.markers = [];
+    var target = this.nextStop();
+    this.state.points.forEach(p => {
+      var color = p.reached ? '#38C172' : (target && p.id === target.id ? '#9184d9' : (p.kind === 'stop' ? '#e9e9ed' : '#75798c'));
+      var radius = p.kind === 'stop' ? (target && p.id === target.id ? 11 : 8) : 4;
+      var m = L.circleMarker([p.lat, p.lon], { radius: radius, color: color, fillColor: color, fillOpacity: p.kind === 'stop' ? 0.95 : 0.6, weight: p.kind === 'stop' ? 2 : 0 }).bindPopup(p.name).addTo(this.map);
+      this.markers.push(m);
+    });
+    if (this.state.points.length && !this.state.tracking) {
+      try { this.map.fitBounds(L.latLngBounds(this.state.points.map(p => [p.lat, p.lon])), { padding: [50, 90] }); } catch (e) {}
+    }
+  }
+
+  scheduleRoute() { clearTimeout(this._routeTimer); this._routeTimer = setTimeout(() => this.fetchRoute(), 400); }
+  fetchRoute() {
+    var pts = this.state.points;
+    if (pts.length < 2) { if (this.routeLine) this.routeLine.setLatLngs([]); this.setState({ routeDistanceM: null, routeDurationS: null }); return; }
+    var coordStr = pts.map(p => p.lon + ',' + p.lat).join(';');
+    fetch('https://router.project-osrm.org/route/v1/driving/' + coordStr + '?overview=full&geometries=geojson')
+      .then(r => r.json()).then(data => {
+        if (data.code === 'Ok' && data.routes && data.routes[0]) {
+          var coords = data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
+          this.routeLine.setLatLngs(coords);
+          this.setState({ routeDistanceM: data.routes[0].distance, routeDurationS: data.routes[0].duration });
+        } else {
+          this.routeLine.setLatLngs(pts.map(p => [p.lat, p.lon]));
+          this.setState({ routeDistanceM: null, routeDurationS: null });
+        }
+      }).catch(() => { this.routeLine.setLatLngs(pts.map(p => [p.lat, p.lon])); this.setState({ routeDistanceM: null, routeDurationS: null }); });
+  }
+
+  nextStop() { var pts = this.state.points; for (var i = 0; i < pts.length; i++) if (pts[i].kind === 'stop' && !pts[i].reached) return pts[i]; return null; }
+  isLastStop(pt) { var stops = this.state.points.filter(p => p.kind === 'stop'); return stops.length && stops[stops.length-1].id === pt.id; }
+
+  goStep = (n) => () => this.setState({ obStep: n });
+  goScreen = (s) => () => { this.setState({ screen: s, fileMenuOpen: false }); setTimeout(() => this.map && this.map.invalidateSize(), 260); };
+
+  captureOnce() {
+    return new Promise((resolve, reject) => {
+      if (!('geolocation' in navigator)) { reject(new Error('Geolocation not supported')); return; }
+      navigator.geolocation.getCurrentPosition(pos => resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude }), reject, { enableHighAccuracy: true, timeout: 15000 });
+    });
+  }
+  captureHome = () => {
+    this.captureOnce().then(pos => {
+      this.setState({ homePos: pos, locGranted: true });
+      try { localStorage.setItem('ruddy_home', JSON.stringify(pos)); } catch (e) {}
+      if (this.map) this.map.setView([pos.lat, pos.lon], 12);
+    }).catch(() => {});
+  };
+  grantLoc = () => this.captureHome();
+  grantNotif = () => { try { Notification.requestPermission().then(() => {}); } catch (e) {} this.setState({ notifGranted: true }); };
+  finishOnboarding = () => this.setState({ screen: 'home' }, () => setTimeout(() => this.map && this.map.invalidateSize(), 260));
+
+  setModeSearch = () => this.setState({ routeMode: 'search' });
+  setModeDraw = () => this.setState({ routeMode: 'draw' });
+  toggleFileMenu = () => this.setState(s => ({ fileMenuOpen: !s.fileMenuOpen }));
+  gpxInputRef = (el) => { this.gpxInput = el; };
+  openGpxImport = () => { this.setState({ fileMenuOpen: false }); this.gpxInput && this.gpxInput.click(); };
+  onGpxFileChosen = (e) => {
+    var file = e.target.files[0]; if (!file) return;
+    var reader = new FileReader();
+    reader.onload = () => {
+      try {
+        var doc = new DOMParser().parseFromString(reader.result, 'application/xml');
+        var nodes = [].slice.call(doc.querySelectorAll('rtept, wpt'));
+        var pts = nodes.map(n => {
+          var nameEl = n.querySelector('name'); var isNamed = n.tagName.toLowerCase() === 'wpt';
+          return { id: uid(), name: (nameEl && nameEl.textContent.trim()) || (isNamed ? 'Stop' : 'Waypoint'), lat: parseFloat(n.getAttribute('lat')), lon: parseFloat(n.getAttribute('lon')), kind: isNamed ? 'stop' : 'waypoint', reached: false };
+        }).filter(p => isFinite(p.lat) && isFinite(p.lon));
+        if (pts.length) pts[pts.length-1].kind = 'stop';
+        this.setState({ points: this.state.points.concat(pts) }, () => { this.renderMarkers(); this.scheduleRoute(); });
+      } catch (err) {}
+    };
+    reader.readAsText(file); e.target.value = '';
+  };
+  exportGpx = () => {
+    this.setState({ fileMenuOpen: false });
+    var pts = this.state.points; if (!pts.length) return;
+    var body = pts.map(p => { var tag = p.kind === 'stop' ? 'wpt' : 'rtept'; return '  <' + tag + ' lat="' + p.lat + '" lon="' + p.lon + '"><name>' + p.name.replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</name></' + tag + '>'; }).join('\n');
+    var gpx = '<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Ruddy">\n<rte>\n' + body + '\n</rte>\n</gpx>';
+    var blob = new Blob([gpx], { type: 'application/gpx+xml' });
+    var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'ruddy-route.gpx';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  };
+
+  onStopQueryChange = (e) => {
+    var q = e.target.value; this.setState({ stopQuery: q });
+    clearTimeout(this._searchTimer);
+    if (q.trim().length < 3) { this.setState({ stopResults: [] }); return; }
+    this._searchTimer = setTimeout(() => {
+      fetch('https://nominatim.openstreetmap.org/search?format=json&limit=5&q=' + encodeURIComponent(q))
+        .then(r => r.json()).then(list => this.setState({ stopResults: list || [] })).catch(() => {});
+    }, 500);
+  };
+  selectStopResult = (item) => () => {
+    this.addPoint({ id: uid(), name: item.display_name.split(',')[0], lat: parseFloat(item.lat), lon: parseFloat(item.lon), kind: 'stop', reached: false });
+    this.setState({ stopQuery: '', stopResults: [] });
+  };
+  selectRecent = (entry) => () => {
+    var pts = entry.points.map(p => ({ id: uid(), name: p.name, lat: p.lat, lon: p.lon, kind: p.kind, reached: false }));
+    this.setState({ points: pts }, () => { this.renderMarkers(); this.scheduleRoute(); });
+  };
+
+  onDrawStart = (e) => {
+    if (!this.map) return;
+    e.currentTarget.setPointerCapture && e.currentTarget.setPointerCapture(e.pointerId);
+    var latlng = this.map.mouseEventToLatLng(e);
+    this._drawPts = [latlng];
+    if (this._drawLine) this.map.removeLayer(this._drawLine);
+    this._drawLine = L.polyline([latlng], { color: '#d2cefd', weight: 4, dashArray: '2 8' }).addTo(this.map);
+  };
+  onDrawMove = (e) => {
+    if (!this._drawPts || !this.map) return;
+    var latlng = this.map.mouseEventToLatLng(e);
+    this._drawPts.push(latlng);
+    this._drawLine.setLatLngs(this._drawPts);
+  };
+  onDrawEnd = () => {
+    if (!this._drawPts || this._drawPts.length < 2) { this._drawPts = null; return; }
+    var start = this._drawPts[0], end = this._drawPts[this._drawPts.length-1];
+    this._drawPts = null;
+    if (this._drawLine) { this.map.removeLayer(this._drawLine); this._drawLine = null; }
+    var reverseGeocode = (ll) => fetch('https://nominatim.openstreetmap.org/reverse?format=json&lat=' + ll.lat + '&lon=' + ll.lng)
+      .then(r => r.json()).then(d => (d && d.display_name) ? d.display_name.split(',')[0] : 'Dropped pin').catch(() => 'Dropped pin');
+    Promise.all([reverseGeocode(start), reverseGeocode(end)]).then(([n1, n2]) => {
+      var pts = this.state.points.slice();
+      pts.push({ id: uid(), name: n1, lat: start.lat, lon: start.lng, kind: 'waypoint', reached: false });
+      pts.push({ id: uid(), name: n2, lat: end.lat, lon: end.lng, kind: 'stop', reached: false });
+      this.setState({ points: pts, routeMode: 'search' }, () => { this.renderMarkers(); this.scheduleRoute(); });
+    });
+  };
+
+  toggleTracking = () => this.state.tracking ? this.stopTracking() : this.startTracking();
+  startTracking() {
+    if (!this.state.points.some(p => p.kind === 'stop')) return;
+    this.setState({ tracking: true });
+    this.saveRecent(this.state.points);
+    if ('wakeLock' in navigator) navigator.wakeLock.request('screen').then(wl => { this._wakeLock = wl; }).catch(() => {});
+    this._watchId = navigator.geolocation.watchPosition(pos => this.onPosition(pos), () => {}, { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 });
+  }
+  stopTracking() {
+    this.setState({ tracking: false });
+    if (this._watchId != null) { navigator.geolocation.clearWatch(this._watchId); this._watchId = null; }
+    if (this._wakeLock) { this._wakeLock.release().catch(() => {}); this._wakeLock = null; }
+  }
+  onPosition(pos) {
+    var lat = pos.coords.latitude, lon = pos.coords.longitude;
+    if (this.meMarker) this.map.removeLayer(this.meMarker);
+    this.meMarker = L.circleMarker([lat, lon], { radius: 7, color: '#f3f5fe', fillColor: '#9184d9', fillOpacity: 1, weight: 2 }).addTo(this.map);
+    this.map.panTo([lat, lon]);
+    var target = this.nextStop();
+    if (!target) return;
+    var d = distMeters(lat, lon, target.lat, target.lon);
+    this.setState({ distToNext: d });
+    if (d <= this.state.radiusM) this.handleArrival(target);
+  }
+  speak(text) {
+    if (!this.state.voice || !('speechSynthesis' in window)) return;
+    try { var u = new SpeechSynthesisUtterance(text); window.speechSynthesis.cancel(); window.speechSynthesis.speak(u); } catch (e) {}
+  }
+  handleArrival(target) {
+    var pts = this.state.points.map(p => p.id === target.id ? Object.assign({}, p, { reached: true }) : p);
+    this.setState({ points: pts }, () => {
+      this.renderMarkers();
+      if ('vibrate' in navigator) try { navigator.vibrate([200,100,200,100,200]); } catch (e) {}
+      var next = this.nextStop(); var last = this.isLastStop(target);
+      this.speak((last ? 'Final destination ' : 'Stop ') + target.name + ' reached.' + (next ? ' Next: ' + next.name + '.' : ' Ride complete.'));
+      this.setState({ arrivalInfo: { reachedName: target.name, isLast: last, nextName: next ? next.name : null, nextLat: next ? next.lat : null, nextLon: next ? next.lon : null } });
+    });
+  }
+  continueWithNav = () => {
+    var info = this.state.arrivalInfo;
+    if (info && info.nextLat != null) {
+      var isAndroid = /Android/i.test(navigator.userAgent);
+      var url = isAndroid ? 'geo:' + info.nextLat + ',' + info.nextLon + '?q=' + info.nextLat + ',' + info.nextLon : 'https://www.google.com/maps/dir/?api=1&destination=' + info.nextLat + ',' + info.nextLon + '&travelmode=driving';
+      try { window.open(url, '_blank'); } catch (e) {}
+    }
+    this.setState({ arrivalInfo: null });
+  };
+  continueOnly = () => this.setState({ arrivalInfo: null });
+
+  onRadiusChange = (e) => { this.setState({ radiusM: parseInt(e.target.value, 10) }); this.persistSettings(); };
+  toggleVoice = () => this.setState(s => ({ voice: !s.voice }), () => this.persistSettings());
+  setUnits = (u) => () => { this.setState({ units: u }); this.persistSettings(); };
+
+  formatDist(m) {
+    if (m == null) return '\u2013';
+    if (this.state.units === 'mi') return (m / 1609.34 < 0.2 ? Math.round(m * 3.281) + ' ft' : (m / 1609.34).toFixed(1) + ' mi');
+    return m < 1000 ? Math.round(m) + ' m' : (m / 1000).toFixed(1) + ' km';
+  }
+  formatDur(s) { if (s == null) return '\u2013'; var h = s / 3600; return h < 1 ? Math.round(s / 60) + ' min' : h.toFixed(1) + ' hr'; }
+
+  renderVals() {
+    var s = this.state;
+    var accent = '#9184d9', accentDim = '#d2cefd', trackOff = '#3f424d', track = '#1c1e2b';
+    var target = this.nextStop();
+    var hasPoints = s.points.length > 0;
+    var hasStops = s.points.some(p => p.kind === 'stop');
+    var recentList = this.loadRecent();
+
+    var pointRows = s.points.map(p => ({
+      name: p.name, kindLabel: p.kind === 'stop' ? 'Stop' : 'Via',
+      iconGlyph: p.kind === 'stop' ? (p.reached ? '\u2713' : '') : '',
+      iconBg: p.reached ? '#38C172' : (target && target.id === p.id ? accent : (p.kind === 'stop' ? '#161826' : '#161826')),
+      iconColor: p.reached ? '#0b1f10' : '#e9e9ed', iconBorder: p.reached ? '#38C172' : (target && target.id === p.id ? accent : '#595d6c'),
+      toggleKind: () => this.toggleKind(p.id), moveUp: () => this.movePoint(p.id, -1), moveDown: () => this.movePoint(p.id, 1), remove: () => this.removePoint(p.id),
+    }));
+
+    var recent = recentList.map(r => ({ name: r.name, select: this.selectRecent(r) }));
+    var stopResults = (s.stopResults || []).map(item => ({ label: item.display_name, select: this.selectStopResult(item) }));
+
+    var homeSetLabel = s.homePos ? 'Home saved \u2713' : 'Use my current location';
+
+    return {
+      isOnboarding: s.screen === 'onboarding', isHome: s.screen === 'home', isRoute: s.screen === 'route', isSettings: s.screen === 'settings',
+      mapRef: this.mapRef,
+      obStep0: s.obStep === 0, obStep1: s.obStep === 1, obStep2: s.obStep === 2,
+      goStep0: this.goStep(0), goStep1: this.goStep(1), goStep2: this.goStep(2),
+      goHome: this.goScreen('home'), goSettings: this.goScreen('settings'), goRoute: this.goScreen('route'),
+      captureHomeOnboarding: this.captureHome, homeSetLabel: homeSetLabel,
+      homeSetBorder: s.homePos ? accent : trackOff, homeSetColor: s.homePos ? accentDim : '#b2b6ca',
+      grantLoc: this.grantLoc, grantNotif: this.grantNotif, finishOnboarding: this.finishOnboarding,
+      locBtnLabel: s.locGranted ? 'Allowed' : 'Allow', locBtnColor: s.locGranted ? accentDim : '#b2b6ca', locBtnBorder: s.locGranted ? accent : trackOff, locIconColor: s.locGranted ? accentDim : '#75798c',
+      notifBtnLabel: s.notifGranted ? 'Allowed' : 'Allow', notifBtnColor: s.notifGranted ? accentDim : '#b2b6ca', notifBtnBorder: s.notifGranted ? accent : trackOff, notifIconColor: s.notifGranted ? accentDim : '#75798c',
+      dot0Color: s.obStep === 0 ? accent : trackOff, dot1Color: s.obStep === 1 ? accent : trackOff, dot2Color: s.obStep === 2 ? accent : trackOff,
+      dot0Width: s.obStep === 0 ? 22 : 6, dot1Width: s.obStep === 1 ? 22 : 6, dot2Width: s.obStep === 2 ? 22 : 6,
+
+      pillText: s.tracking ? 'Tracking\u2026' : (hasPoints ? s.points.length + ' stop' + (s.points.length === 1 ? '' : 's') + ' planned' : 'No route yet'),
+      hasRoute: hasPoints && hasStops,
+      nextKindLabel: target ? (this.isLastStop(target) ? 'Final destination' : 'Next stop') : 'Route complete',
+      nextName: target ? target.name : '\u2014',
+      nextDistLabel: this.formatDist(s.distToNext),
+      startDisabled: !hasStops,
+      startLabel: s.tracking ? 'Stop ride' : 'Start ride',
+      startBorder: hasStops ? accent : trackOff, startColor: hasStops ? accentDim : '#75798c',
+      toggleTracking: this.toggleTracking,
+
+      drawModeOn: s.routeMode === 'draw', searchModeOn: s.routeMode === 'search',
+      setModeDraw: this.setModeDraw, setModeSearch: this.setModeSearch,
+      drawTabBg: s.routeMode === 'draw' ? accent : 'transparent', drawTabColor: s.routeMode === 'draw' ? '#161826' : '#9397ab',
+      searchTabBg: s.routeMode === 'search' ? accent : 'transparent', searchTabColor: s.routeMode === 'search' ? '#161826' : '#9397ab',
+      fileMenuOpen: s.fileMenuOpen, toggleFileMenu: this.toggleFileMenu, openGpxImport: this.openGpxImport, exportGpx: this.exportGpx,
+      gpxInputRef: this.gpxInputRef, onGpxFileChosen: this.onGpxFileChosen,
+      onDrawStart: this.onDrawStart, onDrawMove: this.onDrawMove, onDrawEnd: this.onDrawEnd,
+
+      stopQuery: s.stopQuery, onStopQueryChange: this.onStopQueryChange,
+      hasStopResults: stopResults.length > 0, stopResults: stopResults,
+      hasPoints: hasPoints, hasRecent: recent.length > 0, recent: recent, pointRows: pointRows,
+
+      routeDistLabel: this.formatDist(s.routeDistanceM), routeDurLabel: this.formatDur(s.routeDurationS),
+      reverseRoute: this.reverseRoute, startThisRoute: this.goScreen('home'),
+
+      radiusM: s.radiusM, onRadiusChange: this.onRadiusChange, radiusLabel: this.formatDist(s.radiusM),
+      voice: s.voice, toggleVoice: this.toggleVoice, voiceTrackBg: s.voice ? accent : track, voiceTrackBorder: s.voice ? accent : trackOff, voiceKnobLeft: s.voice ? 22 : 2,
+      homeStatusLabel: s.homePos ? 'Saved' : 'Not set', homeActionLabel: s.homePos ? 'Update' : 'Set now', captureHomeSettings: this.captureHome,
+      units: s.units, setUnitsMi: this.setUnits('mi'), setUnitsKm: this.setUnits('km'),
+      miTabBg: s.units === 'mi' ? accent : 'transparent', miTabColor: s.units === 'mi' ? '#161826' : '#9397ab',
+      kmTabBg: s.units === 'km' ? accent : 'transparent', kmTabColor: s.units === 'km' ? '#161826' : '#9397ab',
+
+      arrivalInfo: s.arrivalInfo,
+      arrivalHeadline: s.arrivalInfo && s.arrivalInfo.isLast ? 'Ride complete' : 'Stop reached',
+      arrivalReachedName: s.arrivalInfo ? s.arrivalInfo.reachedName : '',
+      arrivalHasNext: !!(s.arrivalInfo && s.arrivalInfo.nextName),
+      arrivalNextText: s.arrivalInfo ? (s.arrivalInfo.nextName ? 'Next: ' + s.arrivalInfo.nextName : 'All stops reached') : '',
+      continueWithNav: this.continueWithNav, continueOnly: this.continueOnly,
+    };
+  }
+}
+</script>
+</body>
+</html>
