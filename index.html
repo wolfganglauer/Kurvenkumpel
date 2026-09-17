@@ -37,6 +37,12 @@
   .leaflet-overlay-pane, .leaflet-marker-pane, .leaflet-popup-pane, .leaflet-tooltip-pane{
     filter:invert(1) hue-rotate(220deg);
   }
+  /* Satellitenbilder sollen in echten Farben erscheinen statt dunkel invertiert zu werden -
+     dieselbe Umkehrung muss dann auch bei den eigenen Markern/Routen entfallen, sonst passen
+     deren Farben nicht mehr zusammen. */
+  html.satellite-mode .leaflet-tile-pane{ filter:none; }
+  html.satellite-mode .leaflet-overlay-pane, html.satellite-mode .leaflet-marker-pane,
+  html.satellite-mode .leaflet-popup-pane, html.satellite-mode .leaflet-tooltip-pane{ filter:none; }
   .leaflet-control-attribution{ background:var(--panel) !important; color:var(--text-dim) !important; font-size:10px !important;}
   .leaflet-control-attribution a{ color:var(--text-dim) !important; }
   .leaflet-control-zoom a{ background:var(--panel-solid) !important; color:var(--text) !important; border-color:var(--line) !important; }
@@ -51,6 +57,14 @@
   .poi-marker.coffee{ background:#3f2a1d; color:#f3e5d8; }
   .poi-marker.fuel{ background:#a8d8ef; color:#0d2b3d; }
   .poi-marker.hairpin{ background:#f2883f; color:#3a1a00; }
+  .me-dot-halo{
+    display:flex; align-items:center; justify-content:center;
+    background:rgba(66,133,244,.28); border-radius:50%;
+  }
+  .me-dot{
+    background:#4285F4; border-radius:50%; border:2.5px solid #fff;
+    box-shadow:0 1px 5px rgba(0,0,0,.6);
+  }
   /* Zoom-/Attribution-Steuerung von Leaflet liegt standardmäßig über allem (z-index 1000) und
      überdeckte sonst Text in Status-Pille/Aktionsleiste – deshalb hier wegschieben statt überlagern. */
   .leaflet-top{ margin-top:calc(132px + env(safe-area-inset-top)); z-index:150 !important; }
@@ -91,8 +105,8 @@
   #status-pill{
     background:var(--panel); border:1px solid var(--line); border-radius:16px;
     padding:12px 16px; backdrop-filter:blur(6px);
-    display:flex; align-items:center; justify-content:space-between; gap:10px;
   }
+  #status-pill .sp-row{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
   #status-pill .left{ flex:1 1 auto; min-width:0; }
   #status-pill .kind-tag{
     font-size:11px; text-transform:none; color:var(--text-dim); display:block; margin-bottom:2px;
@@ -101,6 +115,13 @@
   #status-pill .dist{font-family:'Inter'; font-size:24px; font-weight:500; color:var(--accent-dim); white-space:nowrap; flex:0 0 auto;}
   #status-pill .dist small{font-size:12px; color:var(--text-dim); font-weight:500;}
   #status-pill .duration{font-size:12px; color:var(--text-dim); white-space:nowrap; margin-bottom:1px;}
+
+  .sp-track{ position:relative; height:6px; background:var(--line); border-radius:3px; margin-top:10px; }
+  .sp-track-fill{ position:absolute; left:0; top:0; bottom:0; width:0%; background:var(--accent); border-radius:3px; }
+  .sp-marker{ position:absolute; top:50%; transform:translate(-50%,-50%); border-radius:50%; }
+  .sp-marker-stop{ width:9px; height:9px; background:var(--panel-solid); border:2px solid var(--text-dim); z-index:1; }
+  .sp-marker-stop.reached{ background:var(--ok); border-color:var(--ok); }
+  .sp-marker-me{ width:13px; height:13px; background:#9184d9; border:2px solid #e9e9ed; z-index:2; }
 
   /* ---------- Toast "Route bereit" ---------- */
   #start-toast{
@@ -111,7 +132,21 @@
   #start-toast span{ color:var(--accent-ink); font-size:14px; font-weight:600; }
   #start-toast button{ font-size:13px; font-weight:600; border-radius:10px; padding:7px 12px; }
   #start-toast #btn-toast-start{ background:var(--accent-ink); color:var(--accent); }
+  #start-toast #btn-toast-undo{ background:rgba(6,9,13,.25); color:var(--accent-ink); border:1px solid rgba(6,9,13,.4); }
   #start-toast #btn-toast-dismiss{ background:none; color:var(--accent-ink); opacity:.7; padding:7px 6px; }
+
+  .nr-switch{ display:flex; background:var(--panel-solid); border:1px solid var(--line); border-radius:10px; padding:3px; margin-bottom:14px; gap:3px; }
+  .nr-switch-btn{ flex:1; padding:9px 6px; border-radius:7px; font-size:13px; font-weight:500; color:var(--text-dim); background:transparent; border:1px solid transparent; }
+  .nr-switch-btn.active{ background:var(--panel); color:var(--accent-dim); border-color:var(--accent); }
+
+  #draw-hint{
+    display:none; align-items:center; gap:10px;
+    background:var(--panel); border:1.5px solid var(--accent); border-radius:14px;
+    padding:10px 10px 10px 16px; font-size:13px; color:var(--text);
+  }
+  #draw-hint.show{ display:flex; }
+  #draw-hint button{ font-size:13px; font-weight:600; border-radius:10px; padding:7px 12px; background:var(--panel-solid); color:var(--text-dim); border:1px solid var(--line); }
+  #draw-hint #btn-draw-zoom-out, #draw-hint #btn-draw-zoom-in{ width:32px; padding:7px 0; font-size:18px; line-height:1; }
 
   /* ---------- Bottom floating action bar: wenige Elemente ---------- */
   #action-bar{
@@ -153,9 +188,9 @@
   html.platform-android #poi-toggles{ bottom:calc(14px + env(safe-area-inset-bottom) + 146px); }
   #btn-newroute-open{
     position:absolute; right:14px; z-index:500;
-    bottom:calc(14px + env(safe-area-inset-bottom) + 340px);
+    bottom:calc(14px + env(safe-area-inset-bottom) + 408px);
   }
-  html.platform-android #btn-newroute-open{ bottom:calc(14px + env(safe-area-inset-bottom) + 350px); }
+  html.platform-android #btn-newroute-open{ bottom:calc(14px + env(safe-area-inset-bottom) + 418px); }
 
   .poi-toggle{ position:relative; }
   .poi-toggle::after{
@@ -337,20 +372,31 @@
   <div id="route-overview"></div>
   <div id="route-eta" style="display:none;"></div>
   <div id="status-pill">
-    <div class="left">
-      <span class="kind-tag" id="pill-kind">Kein Ziel</span>
-      <div class="target-name" id="pill-name">–</div>
+    <div class="sp-row">
+      <div class="left">
+        <span class="kind-tag" id="pill-kind">Kein Ziel</span>
+        <div class="target-name" id="pill-name">–</div>
+      </div>
+      <div style="text-align:right;">
+        <div class="duration" id="pill-duration"></div>
+        <div class="dist" id="pill-dist">–</div>
+      </div>
     </div>
-    <div style="text-align:right;">
-      <div class="duration" id="pill-duration"></div>
-      <div class="dist" id="pill-dist">–</div>
-    </div>
+    <div class="sp-track" id="sp-track"><div class="sp-track-fill" id="sp-track-fill"></div></div>
   </div>
   <div id="start-toast">
     <span>Route bereit</span>
     <span style="flex:1;"></span>
+    <button id="btn-toast-undo" style="display:none;">Rückgängig</button>
     <button id="btn-toast-dismiss" aria-label="Verwerfen"><span data-icon="close" style="width:14px;height:14px;"></span></button>
     <button id="btn-toast-start"><span data-icon="play" style="width:14px;height:14px;margin-right:6px;"></span>Starten</button>
+  </div>
+  <div id="draw-hint">
+    <span id="draw-hint-text">Vom Standort aus zeichnen, Schleife am Start schließen</span>
+    <span style="flex:1;"></span>
+    <button id="btn-draw-zoom-out" aria-label="Herauszoomen">−</button>
+    <button id="btn-draw-zoom-in" aria-label="Hineinzoomen">+</button>
+    <button id="btn-draw-cancel">Abbrechen</button>
   </div>
 </div>
 
@@ -363,6 +409,7 @@
   <button class="fab poi-toggle" id="btn-poi-coffee" aria-label="Kaffeepausen anzeigen"><span data-icon="coffee" style="width:22px;height:22px;"></span></button>
   <button class="fab poi-toggle" id="btn-poi-fuel" aria-label="Tankstellen anzeigen"><span data-icon="fuel" style="width:22px;height:22px;"></span></button>
   <button class="fab poi-toggle" id="btn-poi-hairpins" aria-label="Spitzkehren anzeigen"><span data-icon="hairpin" style="width:22px;height:22px;"></span></button>
+  <button class="fab poi-toggle" id="btn-satellite" aria-label="Satellitenansicht umschalten"><span data-icon="globe" style="width:22px;height:22px;"></span></button>
 </div>
 <button class="fab" id="btn-newroute-open" aria-label="Neue Route planen"><span data-icon="plus" style="width:22px;height:22px;"></span></button>
 
@@ -435,6 +482,12 @@
 
   <div id="nr-recent" style="display:none; margin-bottom:14px;"></div>
 
+  <div class="nr-switch" id="nr-switch">
+    <button class="nr-switch-btn active" id="nr-switch-text" data-mode="text">Text eingeben</button>
+    <button class="nr-switch-btn" id="nr-switch-draw" data-mode="draw">Auf Karte zeichnen</button>
+  </div>
+
+  <div id="nr-mode-text">
   <div class="field">
     <label for="nr-start">Start</label>
     <input type="text" id="nr-start" placeholder="Ort/Adresse oder Standort verwenden" autocomplete="off">
@@ -449,6 +502,12 @@
   <p class="note" id="nr-go-error" style="display:none; color:var(--danger);">Bitte Start und Ziel jeweils aus der Vorschlagsliste auswählen.</p>
 
   <button class="btn btn-primary btn-block" id="btn-nr-go">Los</button>
+  </div>
+
+  <div id="nr-mode-draw" style="display:none;">
+    <p class="note">Route ab dem aktuellen Standort direkt auf der Karte skizzieren (mit dem Finger ziehen). Schleife am Ausgangspunkt schließen für eine Rundfahrt – oder den Finger woanders anheben für eine einfache Strecke zu einem Ziel. Die grobe Linie wird danach automatisch auf echte Straßen gelegt.</p>
+    <button class="btn btn-primary btn-block" id="btn-nr-draw-start">Auf der Karte zeichnen</button>
+  </div>
 
   <button class="rs-load" id="btn-nr-addpoint" style="margin:16px 0 4px; display:block;">+ Wegpunkt/Zwischenstopp hinzufügen ▾</button>
 
@@ -559,6 +618,7 @@
     hairpin: '<svg viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"><path d="M64 208V104a56 56 0 0 1 112 0v24"/><path d="M144 96l32 32 32-32"/></svg>',
     ruler: '<svg viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"><rect x="32" y="96" width="192" height="64" rx="8"/><path d="M72 96v20M104 96v28M136 96v20M168 96v28M200 96v20"/></svg>',
     gravel: '<svg viewBox="0 0 256 256" fill="currentColor"><circle cx="64" cy="140" r="22"/><circle cx="130" cy="120" r="28"/><circle cx="196" cy="146" r="20"/></svg>',
+    globe: '<svg viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="14"><circle cx="128" cy="128" r="96"/><ellipse cx="128" cy="128" rx="40" ry="96"/><path d="M32 128h192"/><path d="M50 82h156M50 174h156"/></svg>',
     fuel: '<svg viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"><rect x="48" y="40" width="104" height="176" rx="8"/><rect x="68" y="64" width="64" height="48" rx="4"/><path d="M152 96h20a20 20 0 0 1 20 20v72a16 16 0 0 1-32 0v-40"/></svg>'
   };
   function iconHTML(name, px){
@@ -576,31 +636,21 @@
     });
   }
 
-  // Live-Standort: stilisierte Sport-Tourer-Silhouette (CBR1100XX-Proportionen: lange, niedrige
-  // Verkleidung, hohe Frontscheibe) im Comicstil - aus einfachen Grundformen zusammengesetzt, keine
-  // originalgetreue technische Zeichnung. Feste Blickrichtung, dreht sich nicht mit der Fahrtrichtung.
-  var MOTORCYCLE_SVG =
-    '<svg viewBox="0 0 200 110" width="42" height="24">' +
-      '<ellipse cx="100" cy="98" rx="90" ry="6" fill="#000" opacity="0.25"/>' +
-      '<rect x="20" y="72" width="35" height="10" rx="5" fill="#c9ccd1"/>' +
-      '<circle cx="45" cy="80" r="26" fill="#17181d" stroke="#e9e9ed" stroke-width="3"/>' +
-      '<circle cx="45" cy="80" r="10" fill="none" stroke="#9184d9" stroke-width="2"/>' +
-      '<circle cx="155" cy="80" r="26" fill="#17181d" stroke="#e9e9ed" stroke-width="3"/>' +
-      '<circle cx="155" cy="80" r="10" fill="none" stroke="#9184d9" stroke-width="2"/>' +
-      '<rect x="60" y="62" width="80" height="22" rx="4" fill="#17181d"/>' +
-      '<path d="M55,64 L70,40 L100,32 L135,34 L155,46 L150,64 Z" fill="#9184d9"/>' +
-      '<path d="M128,34 L150,20 L156,44 Z" fill="#cfe8f5" fill-opacity="0.8"/>' +
-      '<line x1="118" y1="34" x2="122" y2="21" stroke="#17181d" stroke-width="3" stroke-linecap="round"/>' +
-      '<circle cx="123" cy="19" r="3" fill="#17181d"/>' +
-      '<line x1="150" y1="60" x2="156" y2="52" stroke="#17181d" stroke-width="6" stroke-linecap="round"/>' +
-      '<circle cx="153" cy="49" r="4" fill="#fbe8a6"/>' +
-      '<rect x="47" y="58" width="8" height="5" rx="1" fill="#E5484D"/>' +
-    '</svg>';
-  function motorcycleDivIcon(){
+  // Live-Standort: typischer "blauer Punkt" (wie in gängigen Navigations-Apps) statt Symbol -
+  // Radius passt sich dem Zoomlevel an, damit er sowohl weit herausgezoomt als auch nah dran gut
+  // erkennbar bleibt: größer bei niedrigem Zoom (Übersicht), kleiner bei hohem Zoom (Detailansicht,
+  // soll die Straße darunter nicht verdecken).
+  function meDotRadius(zoom){
+    return Math.max(9, Math.min(15, 24 - zoom * 0.7));
+  }
+  function meDotIcon(zoom){
+    var r = meDotRadius(zoom);
+    var halo = r * 2.2;
     return L.divIcon({
       className: '',
-      html: MOTORCYCLE_SVG,
-      iconSize: [42, 24], iconAnchor: [21, 12]
+      html: '<div class="me-dot-halo" style="width:' + halo + 'px;height:' + halo + 'px;">' +
+              '<div class="me-dot" style="width:' + r + 'px;height:' + r + 'px;"></div></div>',
+      iconSize: [halo, halo], iconAnchor: [halo/2, halo/2]
     });
   }
 
@@ -629,19 +679,185 @@
 
   /* ---------------- Map ---------------- */
   var map = L.map('map', { zoomControl:true, attributionControl:true }).setView([47.5, 11.0], 7);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  var osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19, attribution: '&copy; OpenStreetMap-Mitwirkende &middot; Routing: OSRM/FOSSGIS'
   }).addTo(map);
+  // Esri World Imagery: frei zugängliches Satellitenbild-Kachelangebot ohne API-Key, {z}/{y}/{x}
+  // Reihenfolge beachten (ArcGIS-REST-Konvention, nicht die sonst übliche {z}/{x}/{y}).
+  var satLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    maxZoom: 19, attribution: 'Kacheln &copy; Esri, Maxar, Earthstar Geographics'
+  });
+  var satelliteOn = false;
+  function toggleSatellite(){
+    satelliteOn = !satelliteOn;
+    if (satelliteOn){ map.removeLayer(osmLayer); satLayer.addTo(map); document.documentElement.classList.add('satellite-mode'); }
+    else { map.removeLayer(satLayer); osmLayer.addTo(map); document.documentElement.classList.remove('satellite-mode'); }
+    document.getElementById('btn-satellite').classList.toggle('active', satelliteOn);
+  }
 
   var routeLine = L.polyline([], { color:'#9184d9', weight:4, opacity:.9 }).addTo(map);
+  map.on('zoomend', function(){
+    if (meMarker) meMarker.setIcon(meDotIcon(map.getZoom()));
+  });
   var markers = [];
 
+  var drawState = { active:false, dragging:false, points:[], polyline:null };
+  var DRAW_CLOSE_THRESHOLD_M = 150; // Nähe zum Start, die als "Schleife geschlossen" gilt
+  var DRAW_MIN_POINT_GAP_M = 8;     // Mindestabstand zwischen erfassten Punkten (gegen Punktflut)
+  var DRAW_SIMPLIFY_EPSILON_M = 45; // Douglas-Peucker-Toleranz für die grobe Skizze
+
   map.on('click', function(e){
+    if (drawState.active) return;
     document.getElementById('wp-lat').value = e.latlng.lat.toFixed(6);
     document.getElementById('wp-lon').value = e.latlng.lng.toFixed(6);
     openSheet('sheet-newroute');
     openAddPointSection();
   });
+
+  /* ---------------- Route durch Zeichnen: Skizze -> vereinfachen -> auf Straßen routen ----------------
+     Klassische Douglas-Peucker-Vereinfachung (Abstand zur unbegrenzten Gerade zwischen den Endpunkten
+     des jeweiligen Abschnitts), Distanzmessung über dieselbe lokale Meter-Projektion wie die
+     Kurvenanalyse. Die vereinfachten Punkte werden anschließend wie jede andere Route stinknormal
+     über OSRM geroutet - das "Morphen auf Straßen" übernimmt also die bereits vorhandene, getestete
+     Routing-Pipeline, nicht ein gesondertes Map-Matching (das bei einer groben Freihand-Skizze, die
+     mehrere hundert Meter neben der echten Straße liegen kann, unzuverlässig wäre). */
+  function perpendicularDistanceMeters(pt, lineStart, lineEnd){
+    var lat0 = lineStart[0], lon0 = lineStart[1];
+    var p = toXY(pt[0], pt[1], lat0, lon0);
+    var a = toXY(lineStart[0], lineStart[1], lat0, lon0);
+    var b = toXY(lineEnd[0], lineEnd[1], lat0, lon0);
+    var dx = b.x - a.x, dy = b.y - a.y;
+    var lenSq = dx*dx + dy*dy;
+    if (lenSq < 1e-9) return Math.sqrt((p.x-a.x)*(p.x-a.x) + (p.y-a.y)*(p.y-a.y));
+    var cross = dx*(p.y-a.y) - dy*(p.x-a.x);
+    return Math.abs(cross) / Math.sqrt(lenSq);
+  }
+  function douglasPeucker(pts, epsilon){
+    if (pts.length < 3) return pts.slice();
+    var dmax = 0, index = 0;
+    for (var i=1; i<pts.length-1; i++){
+      var d = perpendicularDistanceMeters(pts[i], pts[0], pts[pts.length-1]);
+      if (d > dmax){ dmax = d; index = i; }
+    }
+    if (dmax > epsilon){
+      var left = douglasPeucker(pts.slice(0, index+1), epsilon);
+      var right = douglasPeucker(pts.slice(index), epsilon);
+      return left.slice(0, -1).concat(right);
+    }
+    return [pts[0], pts[pts.length-1]];
+  }
+
+  function startDrawMode(){
+    var proceed = function(){
+      closeSheets();
+      drawState.active = true;
+      drawState.points = [[currentPos.lat, currentPos.lon]];
+      if (drawState.polyline) map.removeLayer(drawState.polyline);
+      drawState.polyline = L.polyline(drawState.points, { color:'#FFB020', weight:6, opacity:.95 }).addTo(map);
+      map.dragging.disable();
+      map.getContainer().style.touchAction = 'none';
+      document.getElementById('draw-hint').classList.add('show');
+    };
+    if (currentPos){ proceed(); }
+    else {
+      captureOnce().then(function(pos){ currentPos = pos; proceed(); })
+        .catch(function(){ alert('Standort konnte nicht ermittelt werden. Zum Zeichnen wird die aktuelle Position benötigt.'); });
+    }
+  }
+
+  function drawAddPoint(latlng){
+    var last = drawState.points[drawState.points.length-1];
+    if (distMeters(last[0], last[1], latlng.lat, latlng.lng) < DRAW_MIN_POINT_GAP_M) return;
+    drawState.points.push([latlng.lat, latlng.lng]);
+    drawState.polyline.setLatLngs(drawState.points);
+  }
+
+  function cancelDrawMode(){
+    drawState.active = false; drawState.dragging = false;
+    if (drawState.polyline){ map.removeLayer(drawState.polyline); drawState.polyline = null; }
+    drawState.points = [];
+    map.dragging.enable();
+    map.getContainer().style.touchAction = '';
+    document.getElementById('draw-hint').classList.remove('show');
+  }
+
+  function finishDrawMode(){
+    if (!drawState.active) return;
+    drawState.active = false;
+    map.dragging.enable();
+    map.getContainer().style.touchAction = '';
+    document.getElementById('draw-hint').classList.remove('show');
+    if (drawState.polyline){ map.removeLayer(drawState.polyline); drawState.polyline = null; }
+
+    var raw = drawState.points;
+    drawState.points = [];
+    if (raw.length < 2) return; // nur angetippt, nicht gezogen - keine Route erzeugen
+
+    var startLL = [currentPos.lat, currentPos.lon];
+    var lastLL = raw[raw.length-1];
+    // Fester Meterwert wäre beim Herauszoomen nur noch wenige Bildschirmpixel breit und damit kaum
+    // noch treffbar. Stattdessen: Mindestens ~45 Bildschirm-Pixel Toleranz, umgerechnet über die
+    // Web-Mercator-Auflösung am aktuellen Zoom/Breitengrad, nie kleiner als der bisherige Festwert.
+    var mpp = 156543.03392 * Math.cos(startLL[0] * Math.PI/180) / Math.pow(2, map.getZoom());
+    var closeThresholdM = Math.max(DRAW_CLOSE_THRESHOLD_M, mpp * 45);
+    var closed = distMeters(startLL[0], startLL[1], lastLL[0], lastLL[1]) <= closeThresholdM;
+
+    var simplified = douglasPeucker(raw, DRAW_SIMPLIFY_EPSILON_M);
+    simplified[0] = startLL; // Start immer exakt die echte Position, nicht der Skizzenbeginn
+
+    var newPoints = [{ id:uid(), name:'Startpunkt', lat:startLL[0], lon:startLL[1], kind:'waypoint', reached:false }];
+    for (var i=1; i<simplified.length-1; i++){
+      newPoints.push({ id:uid(), name:'Wegpunkt', lat:simplified[i][0], lon:simplified[i][1], kind:'waypoint', reached:false });
+    }
+    if (closed){
+      newPoints.push({ id:uid(), name:'Ziel', lat:startLL[0], lon:startLL[1], kind:'stop', reached:false });
+    } else {
+      var destLL = simplified[simplified.length-1];
+      var destPt = { id:uid(), name:'Ziel', lat:destLL[0], lon:destLL[1], kind:'stop', reached:false };
+      newPoints.push(destPt);
+      reverseGeocode(destLL[0], destLL[1]).then(function(name){ if (name){ destPt.name = name; renderAll(); } });
+    }
+    points = newPoints;
+    renderAll();
+    lastRouteWasDrawn = true;
+    showStartToast();
+  }
+
+  // Bewusst native Pointer-Events statt Leaflets abstrahierter map.on('mousemove', ...)-Ereignisse:
+  // Leaflets eigene Maus-/Touch-Synthese ist eng mit dem (hier deaktivierten) dragging-Handler
+  // verzahnt und lieferte beim Zeichnen keine zuverlässigen Bewegungsereignisse. setPointerCapture
+  // garantiert, dass Bewegungsereignisse beim Ziehen ankommen - dieselbe Technik wie beim Umsortieren
+  // der Punkteliste per Drag&Drop. Ein zweiter gleichzeitiger Finger (Pinch-Zoom) wird NICHT
+  // abgegriffen, sondern bewusst an Leaflets eigene Zoom-Geste durchgereicht.
+  var mapContainer = map.getContainer();
+  var activeDrawPointers = {};
+  mapContainer.addEventListener('pointerdown', function(e){
+    if (!drawState.active) return;
+    if (e.target.closest && e.target.closest('.leaflet-control')) return; // Klick auf Zoom-/Attributionssteuerung
+    activeDrawPointers[e.pointerId] = true;
+    if (Object.keys(activeDrawPointers).length > 1){
+      drawState.dragging = false; // zweiter Finger da - das ist eine Zoom-Geste, kein Zeichnen mehr
+      return;
+    }
+    e.preventDefault();
+    drawState.dragging = true;
+    try{ mapContainer.setPointerCapture(e.pointerId); }catch(err){}
+  });
+  mapContainer.addEventListener('pointermove', function(e){
+    if (!drawState.active || !drawState.dragging) return;
+    if (Object.keys(activeDrawPointers).length > 1) return;
+    var latlng = map.containerPointToLatLng(map.mouseEventToContainerPoint(e));
+    drawAddPoint(latlng);
+  });
+  function endDrawPointer(e){
+    var wasDrawing = drawState.dragging && activeDrawPointers[e.pointerId] && Object.keys(activeDrawPointers).length === 1;
+    delete activeDrawPointers[e.pointerId];
+    if (!drawState.active) return;
+    try{ mapContainer.releasePointerCapture(e.pointerId); }catch(err){}
+    if (wasDrawing){ drawState.dragging = false; finishDrawMode(); }
+  }
+  mapContainer.addEventListener('pointerup', endDrawPointer);
+  mapContainer.addEventListener('pointercancel', endDrawPointer);
 
   /* ---------------- Helpers ---------------- */
   function uid(){ return 'p_' + Math.random().toString(36).slice(2,9); }
@@ -800,6 +1016,7 @@
         points = entry.points.map(function(p){ return { id:uid(), name:p.name, lat:p.lat, lon:p.lon, kind:p.kind, reached:false }; });
         renderAll();
         closeSheets();
+        lastRouteWasDrawn = false;
         showStartToast();
       };
       row.appendChild(b);
@@ -811,7 +1028,7 @@
   // damit die bereits getestete Tracking-Logik unangetastet bleibt.
   function placeMeMarker(pos){
     if (meMarker) map.removeLayer(meMarker);
-    meMarker = L.marker([pos.lat, pos.lon], { icon: motorcycleDivIcon() }).addTo(map);
+    meMarker = L.marker([pos.lat, pos.lon], { icon: meDotIcon(map.getZoom()) }).addTo(map);
     map.setView([pos.lat, pos.lon], Math.max(map.getZoom(), 14));
   }
 
@@ -871,11 +1088,13 @@
 
   /* ---------------- Toast "Route bereit" ---------------- */
   var startToastTimer = null;
+  var lastRouteWasDrawn = false;
   function showStartToast(){
     var toast = document.getElementById('start-toast');
     toast.classList.add('show');
+    document.getElementById('btn-toast-undo').style.display = lastRouteWasDrawn ? 'inline-flex' : 'none';
     clearTimeout(startToastTimer);
-    startToastTimer = setTimeout(function(){ toast.classList.remove('show'); }, 8000);
+    startToastTimer = setTimeout(function(){ toast.classList.remove('show'); }, lastRouteWasDrawn ? 15000 : 8000);
   }
   function hideStartToast(){
     document.getElementById('start-toast').classList.remove('show');
@@ -1086,7 +1305,52 @@
         exIdx++;
       }
     });
+    renderProgressTrack();
   }
+
+  // Reiner Fortschrittsbalken in der Statuszeile, ohne Textbeschriftungen: Füllstand + kleine Punkte
+  // für Start, jeden Zwischenstopp und das Ziel - bewusst OHNE Spitzkehren und reine Wegpunkte, die
+  // gehören auf die Karte bzw. in die Verlaufsleiste, nicht hierher.
+  function renderProgressTrack(){
+    var track = document.getElementById('sp-track');
+    var fill = document.getElementById('sp-track-fill');
+    [].slice.call(track.children).forEach(function(el){ if (el !== fill) el.remove(); });
+
+    if (!points.length){ fill.style.width = '0%'; return; }
+
+    var routeFrac = computeRouteFractions(); // null, solange die echte Streckengeometrie (OSRM) noch nicht geladen ist
+
+    var progress = 0;
+    if (routeFrac && tracking && lastKnownPos){
+      progress = fractionOf(routeFrac, [lastKnownPos.lat, lastKnownPos.lon]);
+    } else if (points.length > 1){
+      var reachedCount = points.filter(function(p){ return p.reached; }).length;
+      progress = reachedCount / (points.length - 1);
+    }
+    progress = Math.max(0, Math.min(1, progress));
+    fill.style.width = (progress * 100) + '%';
+
+    var markerPoints = points.filter(function(p, i){ return i === 0 || p.kind === 'stop'; });
+    markerPoints.forEach(function(p, idx){
+      // Ohne geladene Streckengeometrie (z. B. direkt nach "Los" im Textmodus, OSRM-Antwort steht
+      // noch aus) gleichmäßig verteilen statt alle auf denselben Punkt fallen zu lassen - das war
+      // vermutlich der gemeldete Bug (nur ein Punkt sichtbar, ganz links).
+      var f = routeFrac ? fractionOf(routeFrac, [p.lat, p.lon])
+                         : (markerPoints.length > 1 ? idx / (markerPoints.length - 1) : 0);
+      var dot = document.createElement('div');
+      dot.className = 'sp-marker sp-marker-stop' + (p.reached ? ' reached' : '');
+      dot.style.left = (f * 100) + '%';
+      track.appendChild(dot);
+    });
+
+    if (tracking && lastKnownPos){
+      var me = document.createElement('div');
+      me.className = 'sp-marker sp-marker-me';
+      me.style.left = (progress * 100) + '%';
+      track.appendChild(me);
+    }
+  }
+
 
   /* ---------------- Routing (OSRM, echte Straßenführung) ---------------- */
   var routeTimer = null;
@@ -1381,6 +1645,7 @@
         pts.forEach(function(p, i){ points.push({ id:uid(), name:p.name, lat:p.lat, lon:p.lon, kind:p.kind, reached:false }); });
         if (points.length) points[points.length-1].kind = 'stop'; // letzter Punkt = Ziel, immer als Stopp behandelt
         renderAll();
+        lastRouteWasDrawn = false;
         showStartToast();
       }catch(err){ alert('Import fehlgeschlagen: ' + err.message); }
     };
@@ -1547,6 +1812,7 @@
             if (points.length) points[points.length-1].kind = 'stop';
             renderAll();
             closeSheets();
+            lastRouteWasDrawn = false;
             showStartToast();
           };
           resultEl.appendChild(btn);
@@ -1594,7 +1860,7 @@
     lastKnownPos = { lat:lat, lon:lon };
     lastKnownSpeed = pos.coords.speed;
     if (meMarker) map.removeLayer(meMarker);
-    meMarker = L.marker([lat,lon], { icon: motorcycleDivIcon() }).addTo(map);
+    meMarker = L.marker([lat,lon], { icon: meDotIcon(map.getZoom()) }).addTo(map);
     map.panTo([lat,lon]);
     renderRouteOverview();
     updateRouteETA();
@@ -1688,6 +1954,7 @@
   document.getElementById('btn-poi-coffee').onclick = function(){ togglePoi('coffee', this); };
   document.getElementById('btn-poi-fuel').onclick = function(){ togglePoi('fuel', this); };
   document.getElementById('btn-poi-hairpins').onclick = function(){ togglePoi('hairpins', this); };
+  document.getElementById('btn-satellite').onclick = toggleSatellite;
   document.getElementById('btn-continue-nav').onclick = function(){ closeArrival(true); };
   document.getElementById('btn-continue-only').onclick = function(){ closeArrival(false); };
 
@@ -1788,6 +2055,23 @@
     this.textContent = '+ Wegpunkt/Zwischenstopp hinzufügen ' + (open ? '▾' : '▴');
   };
 
+  document.getElementById('nr-switch-text').onclick = function(){
+    document.getElementById('nr-switch-text').classList.add('active');
+    document.getElementById('nr-switch-draw').classList.remove('active');
+    document.getElementById('nr-mode-text').style.display = 'block';
+    document.getElementById('nr-mode-draw').style.display = 'none';
+  };
+  document.getElementById('nr-switch-draw').onclick = function(){
+    document.getElementById('nr-switch-draw').classList.add('active');
+    document.getElementById('nr-switch-text').classList.remove('active');
+    document.getElementById('nr-mode-draw').style.display = 'block';
+    document.getElementById('nr-mode-text').style.display = 'none';
+  };
+  document.getElementById('btn-nr-draw-start').onclick = startDrawMode;
+  document.getElementById('btn-draw-cancel').onclick = cancelDrawMode;
+  document.getElementById('btn-draw-zoom-in').onclick = function(){ map.zoomIn(); };
+  document.getElementById('btn-draw-zoom-out').onclick = function(){ map.zoomOut(); };
+
   var nrStartResolved = null, nrDestResolved = null;
   wireLocationField('nr-start', 'nr-start-results', function(loc){ nrStartResolved = loc; }, function(){ nrStartResolved = null; });
   wireLocationField('nr-dest', 'nr-dest-results', function(loc){ nrDestResolved = loc; }, function(){ nrDestResolved = null; });
@@ -1804,6 +2088,7 @@
       // zwischenzeitliche eigene Eingabe.
       captureOnce().then(function(pos){
         currentPos = pos;
+        placeMeMarker(pos);
         if (!startField.value){
           startField.value = 'Aktueller Standort';
           nrStartResolved = { name:'Aktueller Standort', lat:pos.lat, lon:pos.lon };
@@ -1823,11 +2108,18 @@
     ];
     renderAll();
     closeSheets();
+    lastRouteWasDrawn = false;
     showStartToast();
   };
 
   document.getElementById('btn-toast-start').onclick = function(){ hideStartToast(); if (!tracking) startTracking(); };
   document.getElementById('btn-toast-dismiss').onclick = hideStartToast;
+  document.getElementById('btn-toast-undo').onclick = function(){
+    points = [];
+    lastRouteWasDrawn = false;
+    renderAll();
+    hideStartToast();
+  };
 
   /* ---------------- Onboarding (3 Schritte, nur beim allerersten Start) ---------------- */
   var appIconEl = document.querySelector('link[rel="apple-touch-icon"]');
@@ -1851,6 +2143,8 @@
     captureOnce().then(function(pos){
       saveHome(pos);
       btn.textContent = 'Zuhause gespeichert ✓';
+      currentPos = pos;
+      placeMeMarker(pos);
     }).catch(function(){
       btn.disabled = false; btn.textContent = 'Aktuellen Standort verwenden';
       alert('Standort konnte nicht ermittelt werden. Du kannst das später in den Einstellungen nachholen.');
@@ -1858,9 +2152,11 @@
   };
   document.getElementById('btn-ob-loc').onclick = function(){
     var btn = this;
-    captureOnce().then(function(){
+    captureOnce().then(function(pos){
       btn.textContent = 'Erlaubt'; btn.disabled = true;
       document.getElementById('ob-perm-loc').classList.add('granted');
+      currentPos = pos;
+      placeMeMarker(pos);
     }).catch(function(){ /* abgelehnt/fehlgeschlagen - laesst sich spaeter jederzeit ueber den Standort-Button nachholen */ });
   };
   document.getElementById('btn-ob-mic').onclick = function(){
