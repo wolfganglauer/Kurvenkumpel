@@ -116,20 +116,12 @@
   #status-pill .dist small{font-size:12px; color:var(--text-dim); font-weight:500;}
   #status-pill .duration{font-size:12px; color:var(--text-dim); white-space:nowrap; margin-bottom:1px;}
 
-  .sp-track-row{ display:flex; align-items:center; gap:8px; margin-top:10px; }
-  .sp-end-label{
-    font-size:10px; color:var(--text-dim); max-width:72px; flex:0 0 auto;
-    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
-  }
-  .sp-track{ position:relative; flex:1 1 auto; height:6px; background:var(--line); border-radius:3px; }
+  .sp-track{ position:relative; height:6px; background:var(--line); border-radius:3px; margin-top:10px; }
   .sp-track-fill{ position:absolute; left:0; top:0; bottom:0; width:0%; background:var(--accent); border-radius:3px; }
-  .sp-marker{ position:absolute; top:50%; transform:translate(-50%,-50%); }
-  .sp-marker-me{ width:14px; height:14px; border-radius:50%; background:#9184d9; border:2px solid #e9e9ed; z-index:2; }
-  .sp-marker-poi{ width:13px; height:13px; border-radius:50%; display:flex; align-items:center; justify-content:center; z-index:1; }
-  .sp-marker-poi svg{ width:8px; height:8px; }
-  .sp-marker-poi.coffee{ background:#3f2a1d; color:#f3e5d8; }
-  .sp-marker-poi.fuel{ background:#a8d8ef; color:#0d2b3d; }
-  .sp-marker-poi.hairpin{ background:#f2883f; color:#3a1a00; }
+  .sp-marker{ position:absolute; top:50%; transform:translate(-50%,-50%); border-radius:50%; }
+  .sp-marker-stop{ width:9px; height:9px; background:var(--panel-solid); border:2px solid var(--text-dim); z-index:1; }
+  .sp-marker-stop.reached{ background:var(--ok); border-color:var(--ok); }
+  .sp-marker-me{ width:13px; height:13px; background:#9184d9; border:2px solid #e9e9ed; z-index:2; }
 
   /* ---------- Toast "Route bereit" ---------- */
   #start-toast{
@@ -154,6 +146,7 @@
   }
   #draw-hint.show{ display:flex; }
   #draw-hint button{ font-size:13px; font-weight:600; border-radius:10px; padding:7px 12px; background:var(--panel-solid); color:var(--text-dim); border:1px solid var(--line); }
+  #draw-hint #btn-draw-zoom-out, #draw-hint #btn-draw-zoom-in{ width:32px; padding:7px 0; font-size:18px; line-height:1; }
 
   /* ---------- Bottom floating action bar: wenige Elemente ---------- */
   #action-bar{
@@ -389,11 +382,7 @@
         <div class="dist" id="pill-dist">–</div>
       </div>
     </div>
-    <div class="sp-track-row">
-      <span class="sp-end-label" id="sp-start-label">–</span>
-      <div class="sp-track" id="sp-track"><div class="sp-track-fill" id="sp-track-fill"></div></div>
-      <span class="sp-end-label" id="sp-end-label">–</span>
-    </div>
+    <div class="sp-track" id="sp-track"><div class="sp-track-fill" id="sp-track-fill"></div></div>
   </div>
   <div id="start-toast">
     <span>Route bereit</span>
@@ -405,6 +394,8 @@
   <div id="draw-hint">
     <span id="draw-hint-text">Vom Standort aus zeichnen, Schleife am Start schließen</span>
     <span style="flex:1;"></span>
+    <button id="btn-draw-zoom-out" aria-label="Herauszoomen">−</button>
+    <button id="btn-draw-zoom-in" aria-label="Hineinzoomen">+</button>
     <button id="btn-draw-cancel">Abbrechen</button>
   </div>
 </div>
@@ -836,24 +827,34 @@
   // Leaflets eigene Maus-/Touch-Synthese ist eng mit dem (hier deaktivierten) dragging-Handler
   // verzahnt und lieferte beim Zeichnen keine zuverlässigen Bewegungsereignisse. setPointerCapture
   // garantiert, dass Bewegungsereignisse beim Ziehen ankommen - dieselbe Technik wie beim Umsortieren
-  // der Punkteliste per Drag&Drop.
+  // der Punkteliste per Drag&Drop. Ein zweiter gleichzeitiger Finger (Pinch-Zoom) wird NICHT
+  // abgegriffen, sondern bewusst an Leaflets eigene Zoom-Geste durchgereicht.
   var mapContainer = map.getContainer();
+  var activeDrawPointers = {};
   mapContainer.addEventListener('pointerdown', function(e){
     if (!drawState.active) return;
+    if (e.target.closest && e.target.closest('.leaflet-control')) return; // Klick auf Zoom-/Attributionssteuerung
+    activeDrawPointers[e.pointerId] = true;
+    if (Object.keys(activeDrawPointers).length > 1){
+      drawState.dragging = false; // zweiter Finger da - das ist eine Zoom-Geste, kein Zeichnen mehr
+      return;
+    }
     e.preventDefault();
     drawState.dragging = true;
     try{ mapContainer.setPointerCapture(e.pointerId); }catch(err){}
   });
   mapContainer.addEventListener('pointermove', function(e){
     if (!drawState.active || !drawState.dragging) return;
+    if (Object.keys(activeDrawPointers).length > 1) return;
     var latlng = map.containerPointToLatLng(map.mouseEventToContainerPoint(e));
     drawAddPoint(latlng);
   });
   function endDrawPointer(e){
-    if (!drawState.active || !drawState.dragging) return;
-    drawState.dragging = false;
+    var wasDrawing = drawState.dragging && activeDrawPointers[e.pointerId] && Object.keys(activeDrawPointers).length === 1;
+    delete activeDrawPointers[e.pointerId];
+    if (!drawState.active) return;
     try{ mapContainer.releasePointerCapture(e.pointerId); }catch(err){}
-    finishDrawMode();
+    if (wasDrawing){ drawState.dragging = false; finishDrawMode(); }
   }
   mapContainer.addEventListener('pointerup', endDrawPointer);
   mapContainer.addEventListener('pointercancel', endDrawPointer);
@@ -1252,7 +1253,7 @@
   function renderRouteOverview(){
     var wrap = document.getElementById('route-overview');
     wrap.innerHTML = '';
-    if (!points.length){ wrap.classList.remove('show'); renderProgressTrack(); return; }
+    if (!points.length){ wrap.classList.remove('show'); return; }
     wrap.classList.add('show');
     var target = nextStop();
     var routeFrac = computeRouteFractions();
@@ -1307,34 +1308,40 @@
     renderProgressTrack();
   }
 
-  // Start-Ziel-Fortschrittsleiste in der Statusleiste: Startort links, Zielort rechts, Live-Position
-  // und aktive POI-Symbole proportional zu ihrer Lage in der Gesamtstrecke dazwischen.
+  // Reiner Fortschrittsbalken in der Statuszeile, ohne Textbeschriftungen: Füllstand + kleine Punkte
+  // für Start, jeden Zwischenstopp und das Ziel - bewusst OHNE Spitzkehren und reine Wegpunkte, die
+  // gehören auf die Karte bzw. in die Verlaufsleiste, nicht hierher.
   function renderProgressTrack(){
     var track = document.getElementById('sp-track');
     var fill = document.getElementById('sp-track-fill');
-    var startLabel = document.getElementById('sp-start-label');
-    var endLabel = document.getElementById('sp-end-label');
     [].slice.call(track.children).forEach(function(el){ if (el !== fill) el.remove(); });
 
-    if (!points.length){
-      startLabel.textContent = '–'; endLabel.textContent = '–'; fill.style.width = '0%';
-      return;
-    }
-    var startPt = points[0], endPt = points[points.length-1];
-    startLabel.textContent = isLiveStart(startPt) ? 'Start' : startPt.name;
-    endLabel.textContent = endPt.name;
+    if (!points.length){ fill.style.width = '0%'; return; }
 
-    var routeFrac = computeRouteFractions();
+    var routeFrac = computeRouteFractions(); // null, solange die echte Streckengeometrie (OSRM) noch nicht geladen ist
+
     var progress = 0;
     if (routeFrac && tracking && lastKnownPos){
       progress = fractionOf(routeFrac, [lastKnownPos.lat, lastKnownPos.lon]);
     } else if (points.length > 1){
-      // Ohne Live-Position (noch nicht gestartet): grobe Schätzung anhand bereits erreichter Stopps
       var reachedCount = points.filter(function(p){ return p.reached; }).length;
       progress = reachedCount / (points.length - 1);
     }
     progress = Math.max(0, Math.min(1, progress));
     fill.style.width = (progress * 100) + '%';
+
+    var markerPoints = points.filter(function(p, i){ return i === 0 || p.kind === 'stop'; });
+    markerPoints.forEach(function(p, idx){
+      // Ohne geladene Streckengeometrie (z. B. direkt nach "Los" im Textmodus, OSRM-Antwort steht
+      // noch aus) gleichmäßig verteilen statt alle auf denselben Punkt fallen zu lassen - das war
+      // vermutlich der gemeldete Bug (nur ein Punkt sichtbar, ganz links).
+      var f = routeFrac ? fractionOf(routeFrac, [p.lat, p.lon])
+                         : (markerPoints.length > 1 ? idx / (markerPoints.length - 1) : 0);
+      var dot = document.createElement('div');
+      dot.className = 'sp-marker sp-marker-stop' + (p.reached ? ' reached' : '');
+      dot.style.left = (f * 100) + '%';
+      track.appendChild(dot);
+    });
 
     if (tracking && lastKnownPos){
       var me = document.createElement('div');
@@ -1342,24 +1349,8 @@
       me.style.left = (progress * 100) + '%';
       track.appendChild(me);
     }
-
-    if (routeFrac){
-      ['coffee','fuel','hairpins'].forEach(function(kind){
-        if (!poiState[kind].on) return;
-        var coordsList = kind === 'hairpins'
-          ? lastHairpinPoints
-          : poiState[kind].markers.map(function(m){ var ll = m.getLatLng(); return [ll.lat, ll.lng]; });
-        coordsList.forEach(function(c){
-          var f = fractionOf(routeFrac, c);
-          var el = document.createElement('div');
-          el.className = 'sp-marker sp-marker-poi ' + (kind === 'hairpins' ? 'hairpin' : kind);
-          el.innerHTML = iconHTML(kind === 'hairpins' ? 'hairpin' : kind, 8);
-          el.style.left = (f * 100) + '%';
-          track.appendChild(el);
-        });
-      });
-    }
   }
+
 
   /* ---------------- Routing (OSRM, echte Straßenführung) ---------------- */
   var routeTimer = null;
@@ -2078,6 +2069,8 @@
   };
   document.getElementById('btn-nr-draw-start').onclick = startDrawMode;
   document.getElementById('btn-draw-cancel').onclick = cancelDrawMode;
+  document.getElementById('btn-draw-zoom-in').onclick = function(){ map.zoomIn(); };
+  document.getElementById('btn-draw-zoom-out').onclick = function(){ map.zoomOut(); };
 
   var nrStartResolved = null, nrDestResolved = null;
   wireLocationField('nr-start', 'nr-start-results', function(loc){ nrStartResolved = loc; }, function(){ nrStartResolved = null; });
