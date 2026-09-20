@@ -7,7 +7,7 @@
    damit ein kuenftiges App-Update (SHELL_CACHE-Version hoch) nicht versehentlich bereits
    heruntergeladene Offline-Kacheln mitloescht - die sind teuer neu zu laden, der App-Code nicht. */
 
-var SHELL_CACHE = 'kurvenkumpel-shell-v1';
+var SHELL_CACHE = 'kurvenkumpel-shell-v2'; // v2: HTML-Seite ist jetzt Network-First statt Cache-First (siehe fetch-Handler)
 var TILE_CACHE = 'kurvenkumpel-tiles-v1';
 var CURRENT_CACHES = [SHELL_CACHE, TILE_CACHE];
 
@@ -49,6 +49,17 @@ self.addEventListener('activate', function(event){
   );
 });
 
+// index.html selbst (bzw. "/") ist die einzige Ressource, die sich durch App-Updates aendert, ohne
+// dass sw.js zwangslaeufig mitgeaendert wird - ein reiner Cache-First hier wuerde bedeuten, dass ein
+// spaeteres Update nie ankommt, solange sw.js selbst byte-identisch bleibt (SW-Update-Erkennung haengt
+// an sw.js, nicht an index.html). Deshalb fuer die HTML-Seite Network-First: online immer die
+// aktuelle Version holen (und den Cache dabei auffrischen), nur bei Netzausfall auf die zuletzt
+// gecachte Version zurueckfallen. Leaflet-CDN (versionierte URL) und Kacheln bleiben Cache-First -
+// die aendern sich unter derselben URL nie.
+function isHtmlPageUrl(url){
+  return url === self.registration.scope || url.indexOf('index.html') !== -1 && url.indexOf(self.location.origin) === 0;
+}
+
 self.addEventListener('fetch', function(event){
   var req = event.request;
   if (req.method !== 'GET') return; // Overpass-POST etc. unangetastet lassen, direkt durchs Netz
@@ -57,9 +68,22 @@ self.addEventListener('fetch', function(event){
   var sameOrigin = url.indexOf(self.location.origin) === 0;
   var isShellCdn = SHELL_URLS.indexOf(url) !== -1;
   var tile = isTileUrl(url);
+  var isHtml = req.mode === 'navigate' || isHtmlPageUrl(url);
 
   // OSRM/Overpass/Nominatim/Anthropic & alles sonstige Fremde: kein respondWith, laeuft normal ans Netz
   if (!sameOrigin && !isShellCdn && !tile) return;
+
+  if (isHtml){
+    event.respondWith(
+      fetch(req).then(function(res){
+        if (res && res.ok) caches.open(SHELL_CACHE).then(function(cache){ cache.put(req, res.clone()); });
+        return res;
+      }).catch(function(){
+        return caches.open(SHELL_CACHE).then(function(cache){ return cache.match(req).then(function(cached){ return cached || cache.match('./index.html'); }); });
+      })
+    );
+    return;
+  }
 
   var cacheName = tile ? TILE_CACHE : SHELL_CACHE;
 
