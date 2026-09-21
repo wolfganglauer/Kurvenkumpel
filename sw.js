@@ -18,7 +18,10 @@ var SHELL_URLS = [
   'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'
 ];
 
-var TILE_HOSTS = ['tile.openstreetmap.org', 'server.arcgisonline.com'];
+// Kommerzialisierungs-Umbau Phase A: alle drei Kartenstile laufen jetzt über CARTO statt über
+// tile.openstreetmap.org (Nutzungsbedingungen schließen kommerzielle Nutzung/Offline-Caching aus)
+// und Esri World Imagery (Satellit wurde entfernt, ebenfalls nicht kommerziell nutzbar gewesen).
+var TILE_HOSTS = ['basemaps.cartocdn.com'];
 
 function isTileUrl(urlStr){
   try{
