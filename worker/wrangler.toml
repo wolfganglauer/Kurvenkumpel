@@ -1,0 +1,7 @@
+name = "kurvenkumpel-proxy"
+main = "index.js"
+compatibility_date = "2026-09-28"
+
+# Secrets (NICHT hier eintragen - via "wrangler secret put" setzen, siehe README.md):
+#   MAPBOX_TOKEN
+#   GEOAPIFY_KEY
