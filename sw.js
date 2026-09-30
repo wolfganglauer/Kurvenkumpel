@@ -18,9 +18,11 @@ var SHELL_URLS = [
   'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'
 ];
 
-// Kommerzialisierungs-Umbau Phase A: alle drei Kartenstile laufen jetzt über CARTO statt über
-// tile.openstreetmap.org (Nutzungsbedingungen schließen kommerzielle Nutzung/Offline-Caching aus)
-// und Esri World Imagery (Satellit wurde entfernt, ebenfalls nicht kommerziell nutzbar gewesen).
+// Alle drei Kartenstile laufen über CARTOs Vektor-Kartendienst statt über tile.openstreetmap.org
+// (Nutzungsbedingungen schließen kommerzielle Nutzung/Offline-Caching aus) oder Esri World Imagery.
+// Ein einziger Host-Eintrag reicht: die Suffix-Prüfung unten erfasst basemaps.cartocdn.com (Style-JSON)
+// genauso wie tiles.basemaps.cartocdn.com (tiles.json/Sprite/Glyphen) und tiles-a/b/c/d.basemaps.
+// cartocdn.com (die eigentlichen .mvt-Kacheln) - alle enden auf ".basemaps.cartocdn.com".
 var TILE_HOSTS = ['basemaps.cartocdn.com'];
 
 function isTileUrl(urlStr){
@@ -98,11 +100,13 @@ self.addEventListener('fetch', function(event){
         // pruefbar (siehe Testplan), nicht nur eine Hoffnung fuer den Ernstfall.
         if (cached) return cached;
         return fetch(req).then(function(res){
-          // Kachel-Bilder werden von Leaflet per <img src> geladen -> no-cors -> opaque Response
-          // (status immer 0/ok:false, Inhalt nicht auslesbar, aber trotzdem cachebar und spaeter
-          // korrekt ausspielbar). Deshalb hier NICHT auf res.ok pruefen, sonst wuerde keine einzige
-          // Kachel je gecacht.
-          if (res) cache.put(req, res.clone());
+          // Vektor-Kacheln/Style/Sprite/Glyphen laufen ueber fetch() mit echten CORS-Headern (anders
+          // als die fruehere <img src>-basierte Raster-Kachel, deren no-cors-Antwort "opak" war und
+          // deren echten Status niemand auslesen konnte) - der Status ist hier normalerweise lesbar,
+          // deshalb NUR bei echtem Erfolg cachen. res.type==='opaque' bleibt als Rueckfalloption
+          // erhalten, falls doch einmal eine Ressource opak ankommt (z.B. ueber einen anderen Ladeweg) -
+          // sonst wuerde sie nie gecacht.
+          if (res && (res.ok || res.type === 'opaque')) cache.put(req, res.clone());
           return res;
         });
       });
