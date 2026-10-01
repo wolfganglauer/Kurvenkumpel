@@ -1,0 +1,106 @@
+<mxfile host="app.diagrams.net" modified="2026-10-01T00:00:00.000Z" agent="Claude" version="24.0.0" type="device">
+  <diagram name="Zeichenmodus-Bug (Vektor-Umstieg)" id="draw-bug">
+    <mxGraphModel dx="1600" dy="1000" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1700" pageHeight="1250" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- Title -->
+        <mxCell id="title" value="Kurvenkumpel: Warum &quot;Route auf der Karte zeichnen&quot; nach dem Umstieg auf CARTO-Vektor-Tiles (MapLibre GL) nicht mehr funktioniert" style="text;html=1;fontSize=20;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="10" width="1620" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- LEFT COLUMN HEADER -->
+        <mxCell id="col1h" value="VORHER - Raster-Tiles (reines Leaflet)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=16;fontStyle=1;align=center;" vertex="1" parent="1">
+          <mxGeometry x="40" y="70" width="760" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- RIGHT COLUMN HEADER -->
+        <mxCell id="col2h" value="NACHHER - Vektor-Tiles (MapLibre GL via L.maplibreGL, ohne interactive:false)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=16;fontStyle=1;align=center;" vertex="1" parent="1">
+          <mxGeometry x="860" y="70" width="800" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- LEFT: outer container -->
+        <mxCell id="c1outer" value="Leaflet Map Container (mapContainer = map.getContainer())" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;verticalAlign=top;fontStyle=1;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="40" y="130" width="760" height="420" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c1tile" value="L.tileLayer (Raster-PNG)&#10;&#10;ein reines &lt;img&gt;-Element pro Kachel.&#10;Keine eigene Interaktionslogik, kein&#10;eigener Event-Handler, keine&#10;Gesten-Erkennung - die Kachel liegt&#10;nur passiv in der Leaflet-Pane." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e8f5e9;strokeColor=#82b366;align=center;verticalAlign=middle;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="80" y="170" width="320" height="170" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c1leaflet" value="Leaflet-Kern (map.dragging, map.on('click'/'drag'...))&#10;einzige Interaktionsinstanz für Pan/Zoom" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e8f5e9;strokeColor=#82b366;align=center;verticalAlign=middle;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="440" y="170" width="320" height="170" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c1app" value="App-Code: eigene pointerdown/move/up-Listener&#10;direkt auf mapContainer (startDrawMode, drawAddPoint,&#10;finishDrawMode) - mit setPointerCapture()" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;align=center;verticalAlign=middle;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="80" y="380" width="680" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e1" value="Finger-Geste (pointerdown/move/up)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;strokeColor=#82b366;" edge="1" parent="1" source="c1tile" target="c1app">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e1b" value="bubbelt ungehindert nach oben" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;strokeColor=#82b366;dashed=1;" edge="1" parent="1" source="c1leaflet" target="c1app">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c1result" value="&#10004; Zeichnen funktioniert: jede Bewegung wird als Routenpunkt erfasst (drawState.points wächst), finishDrawMode() berechnet daraus die Route." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="560" width="760" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- RIGHT: outer container -->
+        <mxCell id="c2outer" value="Leaflet Map Container (mapContainer = map.getContainer())" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#b85450;verticalAlign=top;fontStyle=1;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="860" y="130" width="800" height="420" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c2gl" value="L.maplibreGL({ style })  -  OHNE interactive:false&#10;&#10;erzeugt intern einen VOLLWERTIGEN&#10;maplibregl.Map auf einem eigenen &lt;canvas&gt;.&#10;Per Default interactive:true &#8594; registriert SEINE&#10;EIGENEN Handler: DragPanHandler,&#10;ScrollZoomHandler, TouchZoomRotateHandler,&#10;DoubleClickZoomHandler - alle lauschen selbst&#10;auf pointerdown/move/up bzw. touch-Events&#10;auf demselben Canvas." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;align=center;verticalAlign=middle;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="900" y="170" width="340" height="180" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c2leaflet" value="Leaflet-Kern: map.dragging.disable() beim&#10;Start des Zeichenmodus - deaktiviert NUR&#10;Leaflets EIGENEN Dragging-Handler,&#10;NICHT MapLibres interne Handler!" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;align=center;verticalAlign=middle;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1280" y="170" width="340" height="180" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c2app" value="App-Code: dieselben pointerdown/move/up-Listener&#10;auf mapContainer wie vorher (unverändert seit der&#10;Raster-Ära) - mit setPointerCapture()" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;align=center;verticalAlign=middle;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="900" y="420" width="680" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e2conflict" value="⚡ KONFLIKT: zwei Interaktions-&#10;systeme auf derselben Fläche" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=12;fontStyle=1;fontColor=#b85450;strokeColor=#b85450;strokeWidth=2;dashed=1;" edge="1" parent="1" source="c2gl" target="c2app">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e2b" value="dragging.disable() wirkt NICHT&#10;auf MapLibres eigene Handler" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;strokeColor=#b85450;dashed=1;" edge="1" parent="1" source="c2leaflet" target="c2gl">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c2result" value="&#10006; Zeichnen kaputt: MapLibre verarbeitet/pannt die Geste zuerst bzw. parallel - die App-Handler bekommen keine, zu wenige oder verfälschte Bewegungsdaten. drawState.points bleibt leer/zu kurz &#8594; finishDrawMode() bricht still ab (raw.length &lt; 2)." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=13;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="860" y="560" width="800" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- Root cause box -->
+        <mxCell id="rootcause" value="Root Cause" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontStyle=1;fontSize=16;align=center;" vertex="1" parent="1">
+          <mxGeometry x="40" y="660" width="1620" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="rootcausetext" value="cartoLayer(style) erzeugt den Leaflet-Bridge-Layer für alle drei Kartenstile (dark/raw/positron) per L.maplibreGL({ style: cartoGlStyleUrl(style) }) - ohne das Flag interactive:false.&#10;Der intern erzeugte maplibregl.Map bekommt dadurch volle Standard-Interaktivität (Pan/Zoom/Rotate/Doppelklick-Zoom) und registriert eigene Event-Handler auf seinem &lt;canvas&gt;, obwohl Leaflet (map.dragging) bereits für Pan/Zoom zuständig ist UND der App-Code zusätzlich eine eigene, native Pointer-Capture-Logik fürs Zeichnen direkt auf demselben Container implementiert (siehe Kommentar im Code: &quot;Bewusst native Pointer-Events statt Leaflets abstrahierter map.on('mousemove', ...)-Ereignisse&quot;). Zwei voneinander unabhängige, gleichzeitig aktive Interaktionssysteme auf derselben Fläche konkurrieren um dieselben Zeigerereignisse - betroffen ist jede Custom-Pointer-Geste der App (Zeichenmodus; potenziell auch Drag&amp;Drop beim Umsortieren von Wegpunkten), nicht aber einfache Taps/Clicks (Antippen-Modus, POI-Marker), die als normale, bubbelnde Click-Events meist unbeeinträchtigt durchkommen." style="text;html=1;fontSize=12;align=left;verticalAlign=top;whiteSpace=wrap;spacing=10;" vertex="1" parent="1">
+          <mxGeometry x="40" y="705" width="1620" height="110" as="geometry" />
+        </mxCell>
+
+        <!-- Fix box -->
+        <mxCell id="fixbox" value="Lösung (bereits umgesetzt)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;fontSize=16;align=center;" vertex="1" parent="1">
+          <mxGeometry x="40" y="830" width="790" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="fixtext" value="cartoLayer(style): L.maplibreGL({ style: cartoGlStyleUrl(style), interactive: false })&#10;&#10;MapLibre wird dadurch zum reinen Renderer ohne eigene Interaktionslogik - seine Kamera bewegt sich ausschließlich über die Leaflet&lt;-&gt;MapLibre-Synchronisierung des Bridge-Layers (auf jedes Leaflet move/zoom folgt intern ein glMap.jumpTo(...)). Genau der von @maplibre/maplibre-gl-leaflet für diesen Einsatzzweck vorgesehene Modus. Leaflet bleibt - wie zu Raster-Zeiten - die einzige Interaktionsinstanz; die App-eigene Pointer-Capture-Logik des Zeichenmodus trifft auf keine Konkurrenz mehr." style="text;html=1;fontSize=12;align=left;verticalAlign=top;whiteSpace=wrap;spacing=10;" vertex="1" parent="1">
+          <mxGeometry x="40" y="875" width="790" height="150" as="geometry" />
+        </mxCell>
+
+        <!-- Alternative fixes box -->
+        <mxCell id="altbox" value="Alternativen / Ergänzende Absicherung" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;fontSize=16;align=center;" vertex="1" parent="1">
+          <mxGeometry x="870" y="830" width="790" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="alttext" value="1. CSS-Reserve: pointer-events:none auf dem MapLibre-&lt;canvas&gt; während drawState.active bzw. tapModeActive - zusätzliche Absicherung, falls das Plugin trotz interactive:false intern noch Listener registriert.&#10;&#10;2. Regressionstest ergänzen: nach jedem Kartenstil-/Bibliotheks-Wechsel (z.B. künftige MapLibre-Updates) den Zeichenmodus explizit end-to-end testen - dieser Bug hätte sich sonst erst im Feld gezeigt, da keine Konsolenfehler auftreten (die Geste wird still verschluckt, nicht mit einer Exception quittiert).&#10;&#10;3. Dieselbe Prüfung für den Tap-Modus (PKT) und das Drag&amp;Drop-Umsortieren von Wegpunkten vornehmen - beide nutzen ähnliche Pointer-Logik und könnten von demselben Grundproblem betroffen sein, auch wenn der Bug-Report sich nur auf den Zeichenmodus bezog." style="text;html=1;fontSize=12;align=left;verticalAlign=top;whiteSpace=wrap;spacing=10;" vertex="1" parent="1">
+          <mxGeometry x="870" y="875" width="790" height="150" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
