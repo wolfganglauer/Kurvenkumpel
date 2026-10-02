@@ -6,6 +6,18 @@ später aufgegriffen werden können, statt sie im Chat-Verlauf verloren gehen zu
 
 ## Offen
 
+### POI-Datenbank (D1) tatsächlich in Betrieb nehmen
+**Aufgenommen:** 02.10.2026
+Code-seitig fertig: `worker/schema.sql` (Tabellen `pois`/`road_segments`), die neuen Worker-Endpunkte
+`/pois/nearby` und `/roads/surface` in `worker/index.js`, sowie die Umstellung von `loadPOIs()`/
+`loadRoadSurfaceData()` in `index.html` auf diese Endpunkte mit automatischem Rückfall auf Overpass.
+Noch nicht umgesetzt: der eigentliche Betrieb. Dafür fehlen noch (1) `wrangler deploy` des aktuellen
+Worker-Codes, (2) `wrangler d1 create` + Schema einspielen + Bindung in `wrangler.toml`
+einkommentieren, (3) die Datenbank tatsächlich befüllen über `worker/extract_pois.sh`. Für Schritt 3
+wird `osmium-tool` gebraucht, das es nicht direkt für Windows gibt (am ehesten über WSL oder eine
+separate Linux-Umgebung lösbar) – das ist der Hauptgrund, warum dieser Schritt aufgeschoben wurde.
+Bis dahin läuft die App unverändert über Overpass weiter, siehe `worker/README.md`.
+
 ### Nutzer-Einträge für Bikertreffs
 **Aufgenommen:** 02.10.2026
 Die aktuelle Bikertreff-Liste (`BIKER_MEETUPS` in `index.html`) ist fest im Code hinterlegt und von mir
