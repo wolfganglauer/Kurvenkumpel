@@ -5,3 +5,17 @@ compatibility_date = "2026-09-28"
 # Secrets (NICHT hier eintragen - via "wrangler secret put" setzen, siehe README.md):
 #   MAPBOX_TOKEN
 #   GEOAPIFY_KEY
+
+# POI-Datenbank fuer /pois/nearby und /roads/surface (Kommerzialisierungs-Konzept Punkt 3).
+# ACHTUNG: dieser Block ist absichtlich auskommentiert. Erst einrichten mit:
+#   wrangler d1 create kurvenkumpel-pois
+# Die dabei ausgegebene database_id unten eintragen UND die Kommentarzeichen entfernen, dann:
+#   wrangler d1 execute kurvenkumpel-pois --remote --file=schema.sql
+#   wrangler deploy
+# Ein "YOUR-D1-DATABASE-ID"-Platzhalter wuerde "wrangler deploy" fehlschlagen lassen (ungueltige
+# database_id) - deshalb bleibt der Block bis zur echten Einrichtung auskommentiert, damit die
+# bereits funktionierenden Routing-/Geocoding-Endpunkte durch diesen Schritt nicht kaputtgehen.
+# [[d1_databases]]
+# binding = "POI_DB"
+# database_name = "kurvenkumpel-pois"
+# database_id = "YOUR-D1-DATABASE-ID"

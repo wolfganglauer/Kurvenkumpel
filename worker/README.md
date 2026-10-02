@@ -25,6 +25,47 @@ stehen und waeren fuer jeden Seitenbesucher auslesbar/missbrauchbar.
 6. **Diese URL in `index.html` eintragen**: die Konstante `PROXY_BASE_URL` (Suche danach) auf die
    ausgegebene Worker-URL setzen. Gib mir die URL, dann trage ich sie ein.
 
+## POI-Datenbank (Cafe/Tankstelle/Strassendaten) - optional, Punkt 3 des Konzepts
+
+Ersetzt die Live-Overpass-Abfragen fuer Cafe/Tankstelle/Strassenoberflaechen durch eine eigene,
+periodisch befuellte Datenbank. Overpass ist ein gemeinsam genutzter, oeffentlicher Dienst mit
+Fair-Use-Policy - das passt nicht zu dauerhafter kommerzieller Nutzung. **Solange dieser Teil nicht
+eingerichtet ist, funktioniert die App unveraendert weiter** (automatischer Rueckfall auf Overpass,
+siehe `fetchViaOverpass()` in `index.html`) - dieser Schritt ist optional und kann jederzeit
+nachgeholt werden.
+
+1. **D1-Datenbank anlegen**:
+   ```bash
+   cd worker
+   wrangler d1 create kurvenkumpel-pois
+   ```
+   Gibt eine `database_id` aus.
+2. **In `wrangler.toml` eintragen**: den auskommentierten `[[d1_databases]]`-Block am Ende der Datei
+   einkommentieren und die ausgegebene `database_id` einsetzen.
+3. **Schema anlegen**:
+   ```bash
+   wrangler d1 execute kurvenkumpel-pois --remote --file=schema.sql
+   ```
+4. **Worker neu deployen** (jetzt mit D1-Bindung):
+   ```bash
+   wrangler deploy
+   ```
+5. **Datenbank befuellen** (braucht `osmium-tool` und `node`, siehe Kommentar in `extract_pois.sh`):
+   ```bash
+   ./extract_pois.sh
+   ```
+   Laedt per Default den Bayern-Auszug von Geofabrik (deckt u. a. die Fraenkische Schweiz ab) - fuer
+   einen groesseren Einsatzraum eine andere [Geofabrik-URL](https://download.geofabrik.de) als
+   Argument uebergeben. Sollte periodisch wiederholt werden (z. B. monatlich per Cron), damit neue/
+   geschlossene Cafes und Tankstellen nachgezogen werden - ein erneuter Lauf ersetzt den kompletten
+   Datenbestand (kein inkrementelles Update).
+
+**Wichtig, bevor du Schritt 5 zum ersten Mal laeufst:** ohne befuellte Datenbank liefern die neuen
+Endpunkte `0` Treffer (gueltige, aber leere Antwort) statt automatisch auf Overpass zurueckzufallen -
+der Overpass-Rueckfall greift nur, wenn der Endpunkt selbst nicht erreichbar ist (vor Schritt 4), nicht
+bei einer leeren, aber technisch gueltigen Antwort danach. Schritt 4 und 5 deshalb moeglichst kurz
+hintereinander ausfuehren.
+
 ## Lokal testen (optional, vor dem Deploy)
 
 ```bash
