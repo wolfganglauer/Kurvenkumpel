@@ -2066,9 +2066,7 @@
   // Fenster rund um den bisherigen Fortschritt durchsucht, damit eine Strecke, die an sich selbst
   // vorbeifuehrt (Rundfahrt, Ziel nahe der Strecke), die Position nicht auf den falschen Abschnitt setzt.
   var FRAC_WINDOW_BACK_M = 300, FRAC_WINDOW_FWD_M = 3000, FRAC_WINDOW_MAX_OFFROUTE_M = 150;
-  // minFrac (optional): nur Segmente ab diesem Anteil beruecksichtigen - fuer Manoever in Fahrtreihenfolge, damit ein
-  // Manoever auf einem mehrfach befahrenen Punkt (Kreuzung) dem richtigen Durchgang zugeordnet wird.
-  function fractionOf(routeFrac, latlon, hint, minFrac){
+  function fractionOf(routeFrac, latlon, hint){
     if (!routeFrac) return 0.5;
     var n = lastRouteCoords.length;
     var cosLat = Math.cos(latlon[0] * Math.PI / 180);
@@ -2090,15 +2088,8 @@
       r = search(hint * routeFrac.total - FRAC_WINDOW_BACK_M, hint * routeFrac.total + FRAC_WINDOW_FWD_M);
       if (r.d2 > FRAC_WINDOW_MAX_OFFROUTE_M * FRAC_WINDOW_MAX_OFFROUTE_M) r = null; // weit weg (z. B. nach Umweg): global suchen
     }
-    if (!r) r = search(typeof minFrac === 'number' ? minFrac * routeFrac.total - 20 : -Infinity, Infinity);
+    if (!r) r = search(-Infinity, Infinity);
     return r.pos / routeFrac.total;
-  }
-  // Fortschritt waehrend der Fahrt (merkt sich den letzten Anteil als Suchfenster). Wird fuer Ansagen, Ankunft und
-  // die Restdistanz-Anzeige gemeinsam genutzt - alle muessen an Kreuzungen denselben Durchgang meinen.
-  function progressFrac(routeFrac, lat, lon){
-    var f = fractionOf(routeFrac, [lat, lon], trackFracHint);
-    trackFracHint = f;
-    return f;
   }
 
   // Zeigt/versteckt die Routentyp-Leiste (Schnellste/Kürzeste/Kurvigste + Löschen-Button) und den
@@ -3771,17 +3762,15 @@
     });
     var routeFrac = computeRouteFractions();
     var SKIP_TYPES = { depart: true, arrive: true, notification: true };
-    var prevFrac = 0; // Manoever liegen in Fahrtreihenfolge: jeweils ab dem vorigen suchen
     return raw.filter(function(s){ return s.maneuver && !SKIP_TYPES[s.maneuver.type]; })
       .map(function(s){
         var loc = s.maneuver.location; // OSRM liefert [lon, lat]
-        var stepFrac = fractionOf(routeFrac, [loc[1], loc[0]], null, prevFrac); prevFrac = stepFrac;
         return {
           type: s.maneuver.type,
           modifier: s.maneuver.modifier,
           exit: s.maneuver.exit,
           name: s.name,
-          frac: stepFrac
+          frac: fractionOf(routeFrac, [loc[1], loc[0]])
         };
       });
   }
@@ -3794,7 +3783,8 @@
     if (!lastRouteSteps.length || !lastRouteCoords) return;
     var routeFrac = computeRouteFractions();
     if (!routeFrac) return;
-    var curFrac = progressFrac(routeFrac, lat, lon);
+    var curFrac = fractionOf(routeFrac, [lat, lon], trackFracHint);
+    trackFracHint = curFrac;
     var idx = -1;
     for (var i = 0; i < lastRouteSteps.length; i++){
       if (lastRouteSteps[i].frac > curFrac + 0.0005){ idx = i; break; }
@@ -3845,7 +3835,7 @@
     if (!tracking || !lastKnownPos || !lastRouteCoords){ updateRouteETA(); return; }
     var routeFrac = computeRouteFractions();
     if (!routeFrac){ updateRouteETA(); return; }
-    var frac = progressFrac(routeFrac, lastKnownPos.lat, lastKnownPos.lon);
+    var frac = fractionOf(routeFrac, [lastKnownPos.lat, lastKnownPos.lon]);
     var now = Date.now();
     var speed = lastKnownSpeed; // m/s oder null (kein GPS-Tempo verfügbar)
     var avgExpectedSpeed = lastRouteDurationS > 0 ? (routeFrac.total / lastRouteDurationS) : null; // m/s, Schnitt der ganzen Route
@@ -3881,7 +3871,7 @@
     var remaining = routeFrac.total;
     var speed = null;
     if (tracking && lastKnownPos){
-      var frac = progressFrac(routeFrac, lastKnownPos.lat, lastKnownPos.lon);
+      var frac = fractionOf(routeFrac, [lastKnownPos.lat, lastKnownPos.lon]);
       remaining = routeFrac.total * Math.max(0, 1 - frac);
       speed = lastKnownSpeed;
     }
@@ -4923,7 +4913,8 @@
     var rf = computeRouteFractions();
     var k = points.indexOf(target);
     if (!rf || k < 0 || lastPointFracsSig !== pointsSignature() || typeof lastPointFracs[k] !== 'number') return true;
-    var cur = progressFrac(rf, lat, lon);
+    var cur = fractionOf(rf, [lat, lon], trackFracHint);
+    trackFracHint = cur;
     return (lastPointFracs[k] - cur) * rf.total <= Math.max(ARRIVAL_ALONG_MIN_TOL_M, settings.radius * 2.5);
   }
 
